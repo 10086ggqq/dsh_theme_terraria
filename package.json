@@ -1,0 +1,39 @@
+{
+  "name": "dsh-theme-terraria",
+  "version": "0.1.0",
+  "description": "Terraria pixel theme for the DeepSeek Harness Web UI: a self-contained frontend that replaces the served dist, with the Guide NPC dialog, character-creation mode select, quest HUD, 8-bit sound feedback, and wallpaper system.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./web/*": "./web/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "web"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "terraria",
+    "theme",
+    "pixel-art",
+    "web-ui"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-web-app": "^0.1.0-rc.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-owner/dsh_theme_terraria.git"
+  }
+}

@@ -1,0 +1,22 @@
+# dsh-theme-terraria bundle patch: serve the Terraria theme frontend instead
+# of the official React dist on the Web surface.
+#
+# The official web-runtime row (inserted by the dsh-web-app bundle layer)
+# serves the official frontend and provides the `webRuntime` service the
+# connection row injects. Disabling it here and inserting an identical row
+# whose plugin is dsh-theme-terraria keeps the whole Web runtime — dist
+# serving, the /api trust fence, the web-surface prompt section, DSH_WEB_URL,
+# the URL line — while the served dist becomes this package's web/ directory.
+# Remove this bundle from the profile to fall back to the official frontend.
+
+- id: web-runtime
+  disabled: true
+
+- insert:
+    - id: terraria-theme
+      name: dsh-theme-terraria
+      inject: [webStartup]
+      config:
+        printUrl: true
+        surfaceContext: true
+        trustedHosts: !!js ctx.webStartup.trustedHosts
