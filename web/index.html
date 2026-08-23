@@ -400,7 +400,11 @@ body {
 .list-row.r-sub { margin-left: 18px; }
 .kv-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
 .kv-row .k { color: var(--stone); flex: none; }
+.kv-row .k.k-title { color: var(--torch); text-shadow: 1px 1px 0 var(--black); }
 .kv-row .v { color: var(--parchment); word-break: break-all; text-align: right; }
+/* 设置弹窗密钥行：输入框居左（起点位置与高度不变，宽度自适应让出按钮位），「保存密钥」「工具审批」依次在其右侧，三者底边对齐 */
+.set-actions { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.set-actions .pixel-input { flex: 1; min-width: 120px; }
 .opt-btn {
   display: block; width: 100%; text-align: left;
   background: var(--slate-mid);
@@ -518,6 +522,8 @@ body {
   background: rgba(0,0,0,0.25); cursor: pointer; flex: none;
 }
 .wp-dropzone.drag { border-color: var(--gold); color: var(--gold); background: rgba(255,215,0,0.08); }
+/* 背景音乐音量滑块 */
+.bgm-vol { width: 150px; accent-color: var(--gold); cursor: pointer; }
 /* 视频动态壁纸：铺满视口、静音循环、垫在最底层 */
 #wp-video {
   position: fixed; inset: 0; width: 100%; height: 100%;
@@ -581,6 +587,7 @@ body {
     <button class="pixel-btn btn-sm" id="btn-tab-chat">对话</button>
     <button class="pixel-btn btn-sm" id="btn-tab-term">终端</button>
     <button class="pixel-btn btn-sm" id="btn-sound">音效:开</button>
+    <button class="pixel-btn btn-sm" id="btn-bgm">音乐:关</button>
     <button class="pixel-btn btn-sm" id="btn-settings2">设置</button>
   </header>
   <div class="main-body">
@@ -657,6 +664,7 @@ const state = {
   autoApprove: localStorage.getItem('terraria.autoApprove') === '1',
   workspaceTitle: null,
   sound: localStorage.getItem('terraria.sound') !== '0',
+  bgmOn: localStorage.getItem('terraria.bgmOn') === '1',
   ws: null,
   wsTimer: null,
   streamEl: null,     // 流式输出中的助手气泡 body
@@ -665,6 +673,10 @@ const state = {
   toolBlocks: new Map(),
   historyLoaded: false,
 }
+// 背景音乐音量：localStorage 存 0~1 小数；缺失或非法时回 0.5（'0' 是合法值，需区别于 null）。
+const rawBgmVol = localStorage.getItem('terraria.bgmVol')
+const savedBgmVol = rawBgmVol === null ? NaN : Number(rawBgmVol)
+state.bgmVol = Number.isFinite(savedBgmVol) && savedBgmVol >= 0 && savedBgmVol <= 1 ? savedBgmVol : 0.5
 
 /* ---------- 基础 RPC ---------- */
 class RpcError extends Error {
@@ -1182,26 +1194,26 @@ function wpDb() {
     req.onerror = () => reject(req.error)
   })
 }
-function wpDbPut(blob) {
+function wpDbPut(blob, key = 'video') {
   return wpDb().then(db => new Promise((resolve, reject) => {
     const tx = db.transaction('kv', 'readwrite')
-    tx.objectStore('kv').put(blob, 'video')
+    tx.objectStore('kv').put(blob, key)
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   }))
 }
-function wpDbGet() {
+function wpDbGet(key = 'video') {
   return wpDb().then(db => new Promise((resolve, reject) => {
     const tx = db.transaction('kv', 'readonly')
-    const rq = tx.objectStore('kv').get('video')
+    const rq = tx.objectStore('kv').get(key)
     rq.onsuccess = () => resolve(rq.result || null)
     rq.onerror = () => reject(rq.error)
   }))
 }
-function wpDbClear() {
+function wpDbClear(key = 'video') {
   return wpDb().then(db => new Promise((resolve, reject) => {
     const tx = db.transaction('kv', 'readwrite')
-    tx.objectStore('kv').delete('video')
+    tx.objectStore('kv').delete(key)
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   }))
@@ -1259,8 +1271,8 @@ function loadWallpaperFile(file) {
   }
   reader.readAsDataURL(file)
 }
-/** 给投放区（或任意元素）接上拖拽换壁纸：dragover 高亮，drop 取第一个文件。 */
-function bindWallpaperDrop(zone) {
+/** 给投放区（或任意元素）接上拖拽上传：dragover 高亮，drop 取第一个文件。 */
+function bindWallpaperDrop(zone, load = loadWallpaperFile) {
   zone.addEventListener('dragover', (ev) => {
     ev.preventDefault()
     ev.dataTransfer.dropEffect = 'copy'
@@ -1271,9 +1283,51 @@ function bindWallpaperDrop(zone) {
     ev.preventDefault()
     zone.classList.remove('drag')
     const f = ev.dataTransfer.files && ev.dataTransfer.files[0]
-    if (f) loadWallpaperFile(f)
+    if (f) load(f)
   })
 }
+
+/* ---------- 背景音乐（音频 blob 存 IndexedDB，循环播放） ---------- */
+let bgmAudio = null
+let bgmUrl = null
+function setBgmVolume(v) {
+  state.bgmVol = Math.min(1, Math.max(0, v))
+  localStorage.setItem('terraria.bgmVol', String(state.bgmVol))
+  if (bgmAudio) bgmAudio.volume = state.bgmVol
+}
+function setBgmOn(on) {
+  state.bgmOn = on
+  localStorage.setItem('terraria.bgmOn', on ? '1' : '0')
+  if (bgmAudio) { if (on) bgmAudio.play().catch(() => { }); else bgmAudio.pause() }
+  const label = on ? '音乐:开' : '音乐:关'
+  const top = $('#btn-bgm'); if (top) top.textContent = label
+  const inSet = $('#set-bgm-toggle'); if (inSet) inSet.textContent = on ? '暂停音乐' : '播放音乐'
+}
+async function applyBgm() {
+  let blob = null
+  try { blob = await wpDbGet('bgm') } catch { /* IndexedDB 不可用时保持无音乐 */ }
+  if (bgmUrl) { URL.revokeObjectURL(bgmUrl); bgmUrl = null }
+  if (bgmAudio) { bgmAudio.pause(); bgmAudio = null }
+  if (!blob) return
+  bgmUrl = URL.createObjectURL(blob)
+  bgmAudio = new Audio(bgmUrl)
+  bgmAudio.loop = true
+  bgmAudio.volume = state.bgmVol
+  if (state.bgmOn) bgmAudio.play().catch(() => { /* 自动播放策略拦截，等待首次交互重试 */ })
+}
+function loadBgmFile(file) {
+  const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|ogg|flac|m4a|aac|opus)$/i.test(file.name)
+  if (!isAudio) { toast('请选择音频文件', 'err'); return }
+  if (file.size > 64 * 1024 * 1024) { toast('音频超过 64MB，无法使用', 'err'); return }
+  wpDbPut(file, 'bgm')
+    .then(() => applyBgm())
+    .then(() => { setBgmOn(true); toast('背景音乐已更换', 'ok') })
+    .catch(e => toast('音频保存失败: ' + (e && e.message ? e.message : e), 'err'))
+}
+// 浏览器自动播放策略：页面加载后需一次交互才允许出声；开着重试，直到成功。
+document.addEventListener('pointerdown', () => {
+  if (state.bgmOn && bgmAudio && bgmAudio.paused) bgmAudio.play().catch(() => { })
+})
 
 /* ---------- 插件管理 ---------- */
 /** 常见 dsh 插件的中文说明；未列出的显示通用说明。 */
@@ -1373,7 +1427,7 @@ function openSettings() {
   const body = document.createElement('div')
   const row1 = document.createElement('div')
   row1.className = 'kv-row'
-  const k1 = document.createElement('span'); k1.className = 'k'; k1.textContent = 'DeepSeek API 密钥'
+  const k1 = document.createElement('span'); k1.className = 'k k-title'; k1.textContent = 'DeepSeek API 密钥'
   const v1 = document.createElement('span'); v1.className = 'v'; v1.id = 'set-key-status'
   row1.appendChild(k1); row1.appendChild(v1)
   const input = document.createElement('input')
@@ -1389,6 +1443,20 @@ function openSettings() {
     auto.textContent = state.autoApprove ? '工具审批：自动允许' : '工具审批：手动确认'
     toast(state.autoApprove ? '已开启自动批准（谨慎使用）' : '已恢复手动审批', 'ok')
   })
+  // 密钥行：输入框居左（起点位置与高度不变），「保存密钥」在其右侧留 10px 间隔，「工具审批」最右，三者底边对齐
+  const keyActions = document.createElement('div')
+  keyActions.className = 'set-actions'
+  const saveKey = document.createElement('button')
+  saveKey.className = 'pixel-btn btn-sm btn-gold'
+  saveKey.textContent = '保存密钥'
+  saveKey.addEventListener('click', () => {
+    const val = input.value.trim()
+    if (!val) { toast('未输入密钥', 'err'); return }
+    rpc('credentials.set', { ref: KEY_REF, value: val })
+      .then(() => { toast('密钥已保存，可以开始对话了', 'ok'); input.value = ''; refreshKeyStatus() })
+      .catch(e => toast('保存失败: ' + e.message, 'err'))
+  })
+  keyActions.appendChild(input); keyActions.appendChild(saveKey); keyActions.appendChild(auto)
   const info = document.createElement('div')
   info.style.fontSize = '12px'
   info.style.color = 'var(--stone)'
@@ -1423,6 +1491,52 @@ function openSettings() {
   })
   wpRow.appendChild(wpDrop); wpRow.appendChild(wpReset); wpRow.appendChild(wpFile)
 
+  // 背景音乐区（拖拽或点击上传音频，循环播放，可调音量）
+  const secBgm = document.createElement('div')
+  secBgm.className = 'set-section'
+  secBgm.textContent = '背景音乐'
+  const bgmRow = document.createElement('div')
+  bgmRow.className = 'wp-drop'
+  const bgmDrop = document.createElement('div')
+  bgmDrop.className = 'wp-dropzone'
+  bgmDrop.textContent = '拖拽音频到此处，或点击选择'
+  bindWallpaperDrop(bgmDrop, loadBgmFile)
+  const bgmFile = document.createElement('input')
+  bgmFile.type = 'file'
+  bgmFile.accept = 'audio/*'
+  bgmFile.hidden = true
+  bgmFile.addEventListener('change', () => {
+    if (bgmFile.files && bgmFile.files[0]) loadBgmFile(bgmFile.files[0])
+    bgmFile.value = ''
+  })
+  bgmDrop.addEventListener('click', () => bgmFile.click())
+  const bgmToggle = document.createElement('button')
+  bgmToggle.className = 'pixel-btn btn-sm'
+  bgmToggle.id = 'set-bgm-toggle'
+  bgmToggle.textContent = state.bgmOn ? '暂停音乐' : '播放音乐'
+  bgmToggle.addEventListener('click', () => {
+    if (!bgmAudio) { toast('尚未上传背景音乐', 'err'); return }
+    setBgmOn(!state.bgmOn)
+  })
+  const bgmVol = document.createElement('input')
+  bgmVol.type = 'range'
+  bgmVol.min = '0'; bgmVol.max = '100'; bgmVol.step = '1'
+  bgmVol.value = String(Math.round(state.bgmVol * 100))
+  bgmVol.className = 'bgm-vol'
+  bgmVol.title = '音量'
+  bgmVol.addEventListener('input', () => setBgmVolume(Number(bgmVol.value) / 100))
+  const bgmReset = document.createElement('button')
+  bgmReset.className = 'pixel-btn btn-sm'
+  bgmReset.textContent = '移除音乐'
+  bgmReset.style.marginLeft = 'auto' // 推到行末，右缘与底部「关闭」按钮对齐
+  bgmReset.addEventListener('click', () => {
+    setBgmOn(false)
+    wpDbClear('bgm').then(() => applyBgm())
+    toast('已移除背景音乐', 'ok')
+  })
+  bgmRow.appendChild(bgmDrop); bgmRow.appendChild(bgmToggle); bgmRow.appendChild(bgmVol)
+  bgmRow.appendChild(bgmReset); bgmRow.appendChild(bgmFile)
+
   // 插件管理区
   const secPj = document.createElement('div')
   secPj.className = 'set-section'
@@ -1432,20 +1546,13 @@ function openSettings() {
   pjBtn.textContent = '打开插件管理'
   pjBtn.addEventListener('click', openPluginManager)
 
-  body.appendChild(row1); body.appendChild(input); body.appendChild(auto); body.appendChild(info)
+  body.appendChild(row1); body.appendChild(keyActions); body.appendChild(info)
   body.appendChild(secWp); body.appendChild(wpRow)
+  body.appendChild(secBgm); body.appendChild(bgmRow)
   body.appendChild(secPj); body.appendChild(pjBtn)
   openModal('设置', body, [
+    // 「保存密钥」已从弹窗底部上移至密钥区；底部仅剩「关闭」，flex-end 使其占据最右位置
     { label: '关闭', onClick: () => { } },
-    {
-      label: '保存密钥', gold: true, keep: true, onClick: () => {
-        const val = input.value.trim()
-        if (!val) { toast('未输入密钥', 'err'); return }
-        rpc('credentials.set', { ref: KEY_REF, value: val })
-          .then(() => { toast('密钥已保存，可以开始对话了', 'ok'); input.value = ''; refreshKeyStatus() })
-          .catch(e => toast('保存失败: ' + e.message, 'err'))
-      }
-    },
   ])
   refreshKeyStatus().then(ok => {
     const el = document.getElementById('set-key-status')
@@ -1996,6 +2103,10 @@ $('#btn-sound').addEventListener('click', () => {
   localStorage.setItem('terraria.sound', state.sound ? '1' : '0')
   $('#btn-sound').textContent = state.sound ? '音效:开' : '音效:关'
 })
+$('#btn-bgm').addEventListener('click', () => {
+  if (!bgmAudio) { toast('尚未上传背景音乐，请在「设置」中添加', 'err'); return }
+  setBgmOn(!state.bgmOn)
+})
 $('#btn-settings2').addEventListener('click', openSettings)
 $('#btn-preset').addEventListener('click', openPresetPicker)
 $('#btn-workspace').addEventListener('click', openWorkspace)
@@ -2011,6 +2122,8 @@ $('#btn-cancel').disabled = true
 
 /* ---------- 启动 ---------- */
 applyWallpaper()
+applyBgm()
+$('#btn-bgm').textContent = state.bgmOn ? '音乐:开' : '音乐:关'
 connectWs()
 refreshKeyStatus()
 </script>
