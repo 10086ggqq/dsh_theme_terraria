@@ -271,6 +271,44 @@ body {
   overflow: hidden;
 }
 .dlg-avatar-frame img { image-rendering: pixelated; }
+/* 自定义头像（照片）：铺满裁切、平滑渲染；默认像素画保持 pixelated */
+.dlg-avatar-frame img.custom { image-rendering: auto; width: 100%; height: 100%; object-fit: cover; }
+/* 人物桌宠弹窗预览行 */
+.pet-preview { display: flex; align-items: center; gap: 14px; margin: 4px 0 12px; }
+.pet-preview .dlg-avatar-frame { flex: none; }
+.pet-name-input { margin-top: 8px; }
+/* 性格文本域（复用 pixel-input 视觉）与 .md 导入进度条 */
+.persona-textarea { width: 100%; min-height: 96px; resize: vertical; line-height: 1.6; }
+.md-progress { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.md-progress-track { flex: 1; height: 12px; border: 2px solid var(--black); background: var(--slate-mid); overflow: hidden; }
+.md-progress-bar { height: 100%; width: 0%; background: var(--gold); transition: width 0.15s ease-out; }
+.md-progress-text { font-size: 12px; color: var(--stone); flex: none; }
+/* 桌宠层：每只桌宠一个整屏透明 iframe（脚本按 PETS 清单生成）；显示/隐藏走 opacity+visibility 过渡（visibility 离散翻转，隐藏时仍渐隐完） */
+.pet-layer {
+  position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.5s ease, visibility 0.5s;
+}
+.pet-layer.pet-on { opacity: 1; visibility: visible; }
+.pet-layer iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* 桌宠 toggle 开关：像素滑轨 + 滑块，开启时轨道变金 */
+.pet-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; }
+.pet-toggle { cursor: pointer; flex: none; }
+.pet-toggle-track {
+  width: 54px; height: 26px; position: relative;
+  border: 2px solid var(--black); background: var(--slate-mid);
+  box-shadow: inset 1px 1px #0a0a16;
+  transition: background 0.2s ease;
+}
+.pet-toggle-knob {
+  position: absolute; left: 2px; top: 2px; width: 18px; height: 18px;
+  background: var(--stone); border: 2px solid var(--black);
+  transition: left 0.2s ease, background 0.2s ease;
+}
+.pet-toggle.on .pet-toggle-track { background: var(--gold); }
+.pet-toggle.on .pet-toggle-knob { left: 28px; background: #fff8dc; }
+.pet-toggle:hover .pet-toggle-knob { filter: brightness(1.2); }
+.pet-state { color: var(--stone); font-size: 12px; }
 .dlg-npc-name {
   margin-top: 8px;
   color: #fff;
@@ -572,7 +610,7 @@ body {
     <button class="menu-item" data-action="new">新的会话</button>
     <button class="menu-item" data-action="continue">继续会话</button>
     <button class="menu-item" data-action="settings">设置</button>
-    <button class="menu-item" data-action="credits">制作人员</button>
+    <button class="menu-item" data-action="deskpet">人物桌宠</button>
   </nav>
   <div class="title-foot"><span class="conn-dot" id="conn-dot"></span><span id="conn-label">连接中…</span></div>
 </section>
@@ -596,8 +634,8 @@ body {
       <div class="input-area">
         <div class="dlg-heart"></div>
         <div class="dlg-npc">
-          <div class="dlg-avatar-frame"><img src="/xiangdao.png" alt="向导" /></div>
-          <div class="dlg-npc-name">向导</div>
+          <div class="dlg-avatar-frame"><img src="/xiangdao.png" alt="向导" id="npc-avatar" /></div>
+          <div class="dlg-npc-name" id="npc-name">向导</div>
         </div>
         <div class="dlg-main">
           <textarea class="dlg-input" id="chat-input" placeholder="向你的向导下达指令…（Enter 发送 / Shift+Enter 换行）"></textarea>
@@ -635,6 +673,7 @@ body {
 </section>
 
 <!-- ============ 全局浮层 ============ -->
+<!-- 桌宠层由脚本按 PETS 清单动态生成（每只桌宠一个透明 iframe，独立开关）；层级低于弹窗 -->
 <div id="modal-root" hidden></div>
 <div id="toast-root"></div>
 
@@ -656,6 +695,20 @@ const MODE_META = [
   { id: 'cordis', cls: 'hard', desc: '用于创建自定义 preset：标准全部能力 + 运行时检查与实验。' },
 ]
 
+/** 桌宠清单：id 同时用于状态键（terraria.pet.<id>）与层/iframe 元素 id；顺序即设置面板展示顺序。 */
+const PETS = [
+  { id: 'eoc', name: '克鲁苏之眼', page: 'eoc_pet.html' },
+  { id: 'slimeking', name: '史莱姆王', page: 'slimeking_pet.html' },
+  { id: 'draedon', name: '嘉登', page: 'draedon_pet.html' },
+  { id: 'dog', name: '神明吞噬者', page: 'dog_pet.html' },
+  { id: 'cryogen', name: '极地之灵', page: 'cryogen_pet.html' },
+]
+// 旧版单开关 terraria.petOn 一次性迁移为克鲁苏之眼的独立键，迁移后删除旧键
+if (localStorage.getItem('terraria.pet.eoc') === null && localStorage.getItem('terraria.petOn') !== null) {
+  localStorage.setItem('terraria.pet.eoc', localStorage.getItem('terraria.petOn'))
+  localStorage.removeItem('terraria.petOn')
+}
+
 const state = {
   sessionId: null,
   agentPreset: null,
@@ -663,7 +716,10 @@ const state = {
   model: null,
   autoApprove: localStorage.getItem('terraria.autoApprove') === '1',
   workspaceTitle: null,
+  npcName: localStorage.getItem('terraria.npcName') || '向导',
+  npcPersona: localStorage.getItem('terraria.npcPersona') || '',
   sound: localStorage.getItem('terraria.sound') !== '0',
+  pets: Object.fromEntries(PETS.map(p => [p.id, localStorage.getItem('terraria.pet.' + p.id) !== '0'])),
   bgmOn: localStorage.getItem('terraria.bgmOn') === '1',
   ws: null,
   wsTimer: null,
@@ -865,7 +921,7 @@ function startAssistantStream() {
   bubble.className = 'msg-bubble'
   const name = document.createElement('div')
   name.className = 'msg-name'
-  name.textContent = '向导'
+  name.textContent = state.npcName
   const body = document.createElement('div')
   body.className = 'msg-text'
   body.textContent = ''
@@ -1074,7 +1130,7 @@ function handleApproval(rpcId, p) {
   }
   const body = document.createElement('div')
   const l1 = document.createElement('div')
-  l1.textContent = '向导想要使用工具：' + p.toolName
+  l1.textContent = state.npcName + '想要使用工具：' + p.toolName
   const l2 = document.createElement('div')
   l2.style.fontSize = '12px'
   l2.style.color = 'var(--stone)'
@@ -1142,7 +1198,7 @@ function handleQuestion(rpcId, p) {
     wrap.appendChild(custom)
     body.appendChild(wrap)
   }
-  openModal('向导的提问', body, [
+  openModal(state.npcName + '的提问', body, [
     { label: '取消', danger: true, onClick: () => rpcRespond(rpcId, { sessionId: p.sessionId, answer: { answers: qs.map(q => ({ id: q.id, selected: [], custom: '取消' })) } }).catch(e => toast(e.message, 'err')) },
     {
       label: '回答', gold: true, onClick: () => {
@@ -1328,6 +1384,358 @@ function loadBgmFile(file) {
 document.addEventListener('pointerdown', () => {
   if (state.bgmOn && bgmAudio && bgmAudio.paused) bgmAudio.play().catch(() => { })
 })
+
+/* ---------- 人物桌宠（自定义头像/名字/性格 + 克苏鲁之眼桌宠层） ---------- */
+let npcAvatarUrl = null
+/** 应用人物名字到对话区、输入框 placeholder；空名回退「向导」。 */
+function applyNpcName(name) {
+  state.npcName = (name || '').trim() || '向导'
+  localStorage.setItem('terraria.npcName', state.npcName)
+  const nameEl = $('#npc-name'); if (nameEl) nameEl.textContent = state.npcName
+  const img = $('#npc-avatar'); if (img) img.alt = state.npcName
+  const ta = $('#chat-input')
+  if (ta) ta.placeholder = `向你的${state.npcName}下达指令…（Enter 发送 / Shift+Enter 换行）`
+}
+/** 从 IndexedDB 读取头像并应用到对话区；无自定义头像时恢复默认像素画。 */
+async function applyNpcAvatar() {
+  let blob = null
+  try { blob = await wpDbGet('avatar') } catch { /* IndexedDB 不可用时保持默认头像 */ }
+  if (npcAvatarUrl) { URL.revokeObjectURL(npcAvatarUrl); npcAvatarUrl = null }
+  const img = $('#npc-avatar')
+  if (!img) return
+  if (blob) {
+    npcAvatarUrl = URL.createObjectURL(blob)
+    img.src = npcAvatarUrl
+    img.classList.add('custom')
+  } else {
+    img.src = '/xiangdao.png'
+    img.classList.remove('custom')
+  }
+}
+function loadNpcAvatarFile(file) {
+  if (!file.type.startsWith('image/')) { toast('请选择图片文件', 'err'); return }
+  if (file.size > 16 * 1024 * 1024) { toast('图片超过 16MB，无法使用', 'err'); return }
+  wpDbPut(file, 'avatar')
+    .then(() => applyNpcAvatar())
+    .then(() => {
+      toast('人物头像已更换', 'ok')
+      // 通知打开中的人物桌宠弹窗同步预览
+      window.dispatchEvent(new CustomEvent('dsh:npc-avatar-changed'))
+    })
+    .catch(e => toast('头像保存失败: ' + (e && e.message ? e.message : e), 'err'))
+}
+/**
+ * 应用性格设定到人物桌宠数据：存 state 与 localStorage，并把前 120 字挂到
+ * 头像的 title 上（悬停头像可速览）。空串即清除性格。
+ * @param {string} persona - 规范化后的性格全文。
+ */
+function applyNpcPersona(persona) {
+  state.npcPersona = persona || ''
+  localStorage.setItem('terraria.npcPersona', state.npcPersona)
+  const img = $('#npc-avatar')
+  if (img) img.title = state.npcPersona ? state.npcPersona.slice(0, 120) : ''
+}
+/**
+ * 校验并读取 .md 文件为性格文本。校验：扩展名 .md/.markdown（或 MIME
+ * text/markdown）、非空、≤512KB；读取经 FileReader，onProgress(pct) 驱动
+ * 进度条（传 null 隐藏）；内容做去 BOM、统一换行、去首尾空白、64K 字符
+ * 截断处理后入库，onDone(text) 回调回填编辑区。
+ * @param {File} file - 用户选择或拖入的文件。
+ * @param {(pct:number|null)=>void} [onProgress] - 进度回调。
+ * @param {(text:string)=>void} [onDone] - 成功回调（返回处理后的文本）。
+ */
+function loadPersonaMdFile(file, onProgress, onDone) {
+  const fname = (file.name || '').toLowerCase()
+  const isMd = /\.md$/.test(fname) || /\.markdown$/.test(fname) || file.type === 'text/markdown'
+  if (!isMd) {
+    if (onProgress) onProgress(null)
+    toast('仅支持 .md / .markdown 文件', 'err')
+    return
+  }
+  if (file.size === 0) {
+    if (onProgress) onProgress(null)
+    toast('文件是空的', 'err')
+    return
+  }
+  if (file.size > 512 * 1024) {
+    if (onProgress) onProgress(null)
+    toast('文件超过 512KB，无法导入', 'err')
+    return
+  }
+  const reader = new FileReader()
+  reader.onprogress = (ev) => {
+    if (ev.lengthComputable && onProgress) onProgress(Math.round((ev.loaded / ev.total) * 100))
+  }
+  reader.onerror = () => {
+    if (onProgress) onProgress(null)
+    toast('读取文件失败: ' + (reader.error && reader.error.message ? reader.error.message : '未知错误'), 'err')
+  }
+  reader.onload = () => {
+    if (onProgress) onProgress(100)
+    let text = String(reader.result || '')
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1) // 去 BOM
+    text = text.replace(/\r\n?/g, '\n').trim()             // 统一换行、去首尾空白
+    if (!text) {
+      if (onProgress) onProgress(null)
+      toast('文件内容为空', 'err')
+      return
+    }
+    const MAX_CHARS = 64 * 1024
+    if (text.length > MAX_CHARS) {
+      text = text.slice(0, MAX_CHARS)
+      toast('内容超过 64K 字符，已截断保存', 'err')
+    }
+    applyNpcPersona(text)
+    if (onDone) onDone(text)
+    toast('性格设定已导入', 'ok')
+  }
+  reader.readAsText(file)
+}
+/* ---------- 桌宠层（每只桌宠独立 iframe） ---------- */
+// 按 PETS 清单注入桌宠层：插在 modal-root 之前保持层级（弹窗 100 > 桌宠 90）
+PETS.forEach(p => {
+  const layer = document.createElement('div')
+  layer.id = 'pet-layer-' + p.id
+  layer.className = 'pet-layer'
+  layer.setAttribute('aria-hidden', 'true')
+  const f = document.createElement('iframe')
+  f.id = 'pet-frame-' + p.id
+  f.src = p.page
+  f.title = '桌宠：' + p.name
+  f.tabIndex = -1
+  layer.appendChild(f)
+  document.body.insertBefore(layer, $('#modal-root'))
+})
+/** 向指定桌宠 iframe 发送命令（pause/resume 控制其动画循环）。 */
+function petPost(id, msg) {
+  const f = $('#pet-frame-' + id)
+  if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*')
+}
+/**
+ * 切换单只桌宠显示：pet-on 类驱动 CSS 过渡（opacity+visibility 各 0.5s），
+ * 偏好按桌宠 id 存 localStorage（刷新保持），并向其 iframe 同步 pause/resume。
+ * @param {string} id - 桌宠 id（PETS 成员）。
+ * @param {boolean} on - 目标显示状态。
+ */
+function setPetVisible(id, on) {
+  state.pets[id] = !!on
+  localStorage.setItem('terraria.pet.' + id, state.pets[id] ? '1' : '0')
+  const layer = $('#pet-layer-' + id)
+  if (layer) layer.classList.toggle('pet-on', state.pets[id])
+  petPost(id, { type: 'dsh:pet', command: state.pets[id] ? 'resume' : 'pause' })
+}
+// iframe 通信：按 contentWindow 识别来源桌宠，加载完成（dsh:pet-ready）后下发当前状态完成同步；ack 仅确认送达
+window.addEventListener('message', (ev) => {
+  const d = ev.data
+  if (!d || typeof d !== 'object' || d.type !== 'dsh:pet-ready') return
+  for (const p of PETS) {
+    const f = $('#pet-frame-' + p.id)
+    if (f && f.contentWindow === ev.source) {
+      petPost(p.id, { type: 'dsh:pet', command: state.pets[p.id] ? 'resume' : 'pause' })
+      return
+    }
+  }
+})
+/** 构建桌宠开关组（每只桌宠一行：像素滑轨开关 + 名称 + 开/关状态），用于「人物桌宠」弹窗；状态走 state.pets/setPetVisible。 */
+function buildPetRows() {
+  return PETS.map(p => {
+    const row = document.createElement('div')
+    row.className = 'pet-row'
+    const toggle = document.createElement('div')
+    toggle.className = 'pet-toggle' + (state.pets[p.id] ? ' on' : '')
+    toggle.setAttribute('role', 'switch')
+    toggle.setAttribute('aria-checked', String(state.pets[p.id]))
+    toggle.tabIndex = 0
+    const track = document.createElement('div')
+    track.className = 'pet-toggle-track'
+    const knob = document.createElement('div')
+    knob.className = 'pet-toggle-knob'
+    track.appendChild(knob)
+    toggle.appendChild(track)
+    const label = document.createElement('span')
+    label.textContent = p.name
+    const st = document.createElement('span')
+    st.className = 'pet-state'
+    const sync = () => {
+      toggle.classList.toggle('on', state.pets[p.id])
+      toggle.setAttribute('aria-checked', String(state.pets[p.id]))
+      st.textContent = state.pets[p.id] ? '（开）' : '（关）'
+    }
+    sync()
+    const flip = () => { setPetVisible(p.id, !state.pets[p.id]); sync() }
+    toggle.addEventListener('click', flip)
+    toggle.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); flip() }
+    })
+    row.appendChild(toggle); row.appendChild(label); row.appendChild(st)
+    return row
+  })
+}
+/** 人物桌宠弹窗：头像预览 + 拖拽/点击上传 + 名字编辑 + 性格编辑（含 .md 导入）+ 屏幕桌宠开关 + 恢复默认。 */
+function openDeskPet() {
+  const body = document.createElement('div')
+  // 预览行：头像（与对话区同 88×88）+ 当前名字
+  const preview = document.createElement('div')
+  preview.className = 'pet-preview'
+  const frame = document.createElement('div')
+  frame.className = 'dlg-avatar-frame'
+  const pvImg = document.createElement('img')
+  pvImg.alt = state.npcName
+  const mainImg = $('#npc-avatar')
+  if (mainImg && mainImg.classList.contains('custom') && npcAvatarUrl) {
+    pvImg.src = npcAvatarUrl
+    pvImg.className = 'custom'
+  } else {
+    pvImg.src = '/xiangdao.png'
+  }
+  frame.appendChild(pvImg)
+  // 名字 + 性格字数指示（竖排一列）
+  const pvCol = document.createElement('div')
+  const pvName = document.createElement('div')
+  pvName.className = 'dlg-npc-name'
+  pvName.style.marginTop = '0'
+  pvName.textContent = state.npcName
+  const pvPersona = document.createElement('div')
+  pvPersona.style.cssText = 'font-size:12px;color:var(--stone);margin-top:6px'
+  const updatePvPersona = () => {
+    pvPersona.textContent = state.npcPersona ? '性格：' + state.npcPersona.length + ' 字' : '性格：未设置'
+  }
+  updatePvPersona()
+  pvCol.appendChild(pvName); pvCol.appendChild(pvPersona)
+  preview.appendChild(frame); preview.appendChild(pvCol)
+  // 上传区：拖拽或点击选择图片（推荐正方形，对话区显示 88×88）
+  const drop = document.createElement('div')
+  drop.className = 'wp-dropzone'
+  drop.textContent = '拖拽图片到此处，或点击选择（显示为 88×88 头像）'
+  bindWallpaperDrop(drop, loadNpcAvatarFile)
+  const file = document.createElement('input')
+  file.type = 'file'
+  file.accept = 'image/*'
+  file.hidden = true
+  file.addEventListener('change', () => {
+    if (file.files && file.files[0]) loadNpcAvatarFile(file.files[0])
+    file.value = ''
+  })
+  drop.addEventListener('click', () => file.click())
+  // 名字编辑：失焦或回车即保存，预览同步
+  const nameInput = document.createElement('input')
+  nameInput.className = 'pixel-input pet-name-input'
+  nameInput.placeholder = '人物名字（如：向导）'
+  nameInput.maxLength = 12
+  nameInput.value = state.npcName
+  const commitName = () => {
+    const v = nameInput.value.trim()
+    if (!v) { nameInput.value = state.npcName; toast('名字不能为空，已还原', 'err'); return }
+    if (v === state.npcName) return
+    applyNpcName(v)
+    pvName.textContent = state.npcName
+    pvImg.alt = state.npcName
+    toast('人物名字已保存', 'ok')
+  }
+  nameInput.addEventListener('change', commitName)
+  nameInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); nameInput.blur() } })
+  // 性格区：文本域直接编辑 + .md 文件导入（拖拽/点击，带进度条）
+  const secPersona = document.createElement('div')
+  secPersona.className = 'set-section'
+  secPersona.textContent = '性格'
+  const personaTa = document.createElement('textarea')
+  personaTa.className = 'pixel-input persona-textarea'
+  personaTa.placeholder = '描述人物性格（可直接输入，或从 .md 文件导入）'
+  personaTa.value = state.npcPersona
+  const commitPersona = () => {
+    const v = personaTa.value.trim()
+    if (v === state.npcPersona) return
+    applyNpcPersona(v)
+    updatePvPersona()
+    toast('性格设定已保存', 'ok')
+  }
+  personaTa.addEventListener('change', commitPersona)
+  const mdDrop = document.createElement('div')
+  mdDrop.className = 'wp-dropzone'
+  mdDrop.textContent = '拖拽 .md 文件到此处，或点击导入'
+  const mdFile = document.createElement('input')
+  mdFile.type = 'file'
+  mdFile.accept = '.md,.markdown,text/markdown'
+  mdFile.hidden = true
+  // 导入进度条：读取期间显示百分比，完成/失败后收起
+  const progress = document.createElement('div')
+  progress.className = 'md-progress'
+  progress.hidden = true
+  const track = document.createElement('div')
+  track.className = 'md-progress-track'
+  const bar = document.createElement('div')
+  bar.className = 'md-progress-bar'
+  const pText = document.createElement('span')
+  pText.className = 'md-progress-text'
+  pText.textContent = '导入中 0%'
+  track.appendChild(bar); progress.appendChild(track); progress.appendChild(pText)
+  const setProgress = (pct) => {
+    if (pct === null) { progress.hidden = true; return }
+    progress.hidden = false
+    bar.style.width = pct + '%'
+    pText.textContent = '导入中 ' + pct + '%'
+  }
+  const importPersona = (f) => {
+    setProgress(0)
+    loadPersonaMdFile(f, setProgress, (text) => {
+      personaTa.value = text
+      updatePvPersona()
+      // 100% 短暂停留后收起进度条
+      setTimeout(() => setProgress(null), 800)
+    })
+  }
+  bindWallpaperDrop(mdDrop, importPersona)
+  mdDrop.addEventListener('click', () => mdFile.click())
+  mdFile.addEventListener('change', () => {
+    if (mdFile.files && mdFile.files[0]) importPersona(mdFile.files[0])
+    mdFile.value = ''
+  })
+  // 桌宠区：屏幕桌宠独立开关（与「设置」面板共用 buildPetRows，状态联动）
+  const secPet = document.createElement('div')
+  secPet.className = 'set-section'
+  secPet.textContent = '桌宠'
+  const petRows = buildPetRows()
+  const petHint = document.createElement('div')
+  petHint.style.cssText = 'font-size:12px;color:var(--stone);margin:4px 0 8px'
+  petHint.textContent = '桌宠会在屏幕上游荡，不会挡住任何操作。'
+  // 恢复默认：清头像 + 名字回「向导」+ 清空性格
+  const reset = document.createElement('button')
+  reset.className = 'pixel-btn btn-sm'
+  reset.textContent = '恢复默认'
+  reset.addEventListener('click', () => {
+    wpDbClear('avatar')
+      .then(() => applyNpcAvatar())
+      .then(() => {
+        applyNpcName('向导')
+        applyNpcPersona('')
+        nameInput.value = state.npcName
+        personaTa.value = ''
+        updatePvPersona()
+        pvName.textContent = state.npcName
+        pvImg.src = '/xiangdao.png'
+        pvImg.className = ''
+        pvImg.alt = state.npcName
+        toast('已恢复默认人物桌宠', 'ok')
+      })
+      .catch(e => toast('恢复失败: ' + (e && e.message ? e.message : e), 'err'))
+  })
+  // 打开期间上传头像后，同步弹窗内预览
+  const syncPreview = () => {
+    const mi = $('#npc-avatar')
+    if (mi && mi.classList.contains('custom') && npcAvatarUrl) { pvImg.src = npcAvatarUrl; pvImg.className = 'custom' }
+    else { pvImg.src = '/xiangdao.png'; pvImg.className = '' }
+  }
+  window.addEventListener('dsh:npc-avatar-changed', syncPreview, { once: false })
+  body.appendChild(preview); body.appendChild(drop); body.appendChild(file)
+  body.appendChild(nameInput)
+  body.appendChild(secPersona); body.appendChild(personaTa)
+  body.appendChild(mdDrop); body.appendChild(mdFile); body.appendChild(progress)
+  body.appendChild(secPet); petRows.forEach(r => body.appendChild(r)); body.appendChild(petHint)
+  body.appendChild(reset)
+  openModal('人物桌宠', body, [
+    { label: '关闭', onClick: () => window.removeEventListener('dsh:npc-avatar-changed', syncPreview) },
+  ])
+}
 
 /* ---------- 插件管理 ---------- */
 /** 常见 dsh 插件的中文说明；未列出的显示通用说明。 */
@@ -2001,7 +2409,7 @@ function enterMain() {
   setRunning(false)
   $('#main-session-name').textContent = (state.agentPreset && PRESET_NAMES[state.agentPreset]) || '向导'
   if (state.workspaceTitle) $('#main-session-name').textContent += '@' + state.workspaceTitle
-  appendSysLine('欢迎来到泰拉瑞亚！我是你的向导。')
+  appendSysLine('欢迎来到泰拉瑞亚！我是你的' + state.npcName + '。')
   $('#chat-input').focus()
 }
 
@@ -2088,11 +2496,7 @@ document.querySelectorAll('.menu-item').forEach(btn => {
     if (act === 'new') newSession()
     else if (act === 'continue') openContinueList()
     else if (act === 'settings') openSettings()
-    else if (act === 'credits') {
-      const body = document.createElement('div')
-      body.innerHTML = '<div>DeepSeek Harness · Cordis 插件架构</div><div style="font-size:12px;color:var(--stone)">泰拉瑞亚主题皮肤：向导陪你写代码。</div><div style="font-size:12px;color:var(--stone)">像素字体：Fusion Pixel 12px</div>'
-      openModal('制作人员', body, [{ label: '好的', gold: true, onClick: () => { } }])
-    }
+    else if (act === 'deskpet') openDeskPet()
   })
 })
 $('#btn-to-title').addEventListener('click', backToTitle)
@@ -2123,6 +2527,10 @@ $('#btn-cancel').disabled = true
 /* ---------- 启动 ---------- */
 applyWallpaper()
 applyBgm()
+applyNpcName(state.npcName)
+applyNpcAvatar()
+applyNpcPersona(state.npcPersona)
+PETS.forEach(p => setPetVisible(p.id, state.pets[p.id]))
 $('#btn-bgm').textContent = state.bgmOn ? '音乐:开' : '音乐:关'
 connectWs()
 refreshKeyStatus()

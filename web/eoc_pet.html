@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>克苏鲁之眼 - 桌宠</title>
+<!-- 桌宠内容页：由 assets/pet_html/eoc_pet.html 派生；额外实现与宿主页的 postMessage 通信
+     （宿主页发 dsh:pet pause/resume，本页回 dsh:pet-ack；加载完成发 dsh:pet-ready）。 -->
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;}#stage{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;}.eye{position:absolute;left:0;top:0;width:160px;height:160px;background-image:url("data:image/png;base64,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");background-size:contain;background-repeat:no-repeat;background-position:center;transform-origin:center;will-change:transform,left,top;}
+</style>
+</head>
+<body>
+<div id="stage"><div class="eye" id="eye"></div></div>
+<script>
+const eye=document.getElementById('eye');
+let pos={x:window.innerWidth/2,y:window.innerHeight/2};
+let vel={x:0,y:0};
+let tgt={x:pos.x,y:pos.y};
+let angle=0;
+const SPEED=0.05,DAMP=0.98,REACH=120;
+// 宿主页通信：接收 dsh:pet pause/resume 命令并回 ack；pause 时冻结动画循环省 CPU
+let running=true;
+window.addEventListener('message',(ev)=>{
+  const d=ev.data;
+  if(!d||d.type!=='dsh:pet')return;
+  if(d.command==='pause')running=false;
+  else if(d.command==='resume')running=true;
+  if(ev.source)ev.source.postMessage({type:'dsh:pet-ack',command:d.command,running:running},'*');
+});
+function newTarget(){
+  const m=80;
+  tgt.x=Math.max(m,Math.min(window.innerWidth-m,Math.random()*window.innerWidth));
+  tgt.y=Math.max(m,Math.min(window.innerHeight-m,Math.random()*window.innerHeight));
+}
+function ag(dx,dy){return Math.atan2(dy,dx)*180/Math.PI;}
+function tick(){
+  if(running){
+  if(Math.random()<(1/150))newTarget();
+  const dx=tgt.x-pos.x,dy=tgt.y-pos.y;
+  const dist=Math.hypot(dx,dy);
+  if(dist>REACH){
+    const a=ag(dx,dy)*Math.PI/180;
+    vel.x+=Math.cos(a)*SPEED;
+    vel.y+=Math.sin(a)*SPEED;
+  }else{
+    newTarget();
+  }
+  vel.x*=DAMP;vel.y*=DAMP;
+  pos.x+=vel.x;pos.y+=vel.y;
+  const ang=ag(vel.x,vel.y)-90;
+  if(!isNaN(ang))angle=ang;
+  eye.style.left=(pos.x-80)+'px';
+  eye.style.top=(pos.y-80)+'px';
+  eye.style.transform='rotate('+angle+'deg)';
+  }
+  requestAnimationFrame(tick);
+}
+window.addEventListener('resize',()=>{
+  pos.x=Math.min(pos.x,window.innerWidth-80);
+  pos.y=Math.min(pos.y,window.innerHeight-80);
+});
+newTarget();
+tick();
+// 通知宿主页已就绪；宿主页会回发当前 pause/resume 状态完成同步
+parent.postMessage({type:'dsh:pet-ready'},'*');
+</script>
+</body>
+</html>

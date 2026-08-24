@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>史莱姆王 - 桌宠</title>
+<!-- 桌宠内容页：由 assets/pet_html/slimeking_pet.html 派生；尺寸对齐克苏鲁之眼 160px 标准；
+     额外实现与宿主页的 postMessage 通信（宿主页发 dsh:pet pause/resume，本页回 dsh:pet-ack；加载完成发 dsh:pet-ready）。 -->
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;}#stage{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;}.pet{position:absolute;left:0;top:0;width:160px;height:160px;background-image:url("data:image/png;base64,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");background-size:contain;background-repeat:no-repeat;background-position:center;transform-origin:center;will-change:transform,left,top;}
+</style>
+</head>
+<body>
+<div id="stage"><div class="pet" id="pet"></div></div>
+<script>
+const pet=document.getElementById('pet');
+const SIZE=160;
+const SETY=130;
+let dx=0,dy=0;
+let movet=0;
+let dr=true;
+let fr=6,timer=0;
+let scaleY=1,scaleX=1;
+let pos={x:window.innerWidth/2,y:window.innerHeight-SETY};
+const SPEED=0.03;
+function groundY(){return window.innerHeight-SETY;}
+// 宿主页通信：接收 dsh:pet pause/resume 命令并回 ack；pause 时冻结动画循环省 CPU
+let running=true;
+window.addEventListener('message',(ev)=>{
+  const d=ev.data;
+  if(!d||d.type!=='dsh:pet')return;
+  if(d.command==='pause')running=false;
+  else if(d.command==='resume')running=true;
+  if(ev.source)ev.source.postMessage({type:'dsh:pet-ack',command:d.command,running:running},'*');
+});
+function tick(){
+  if(running){
+  // 跳跃触发
+  if(Math.floor(Math.random()*161)===0 && pos.y===groundY()){
+    dy=Math.floor(Math.random()*11)-15; // -15 ~ -5
+    dx*=3;
+    fr=6;
+    scaleY=1-dy/15*0.7;
+  }
+  // 随机转向
+  if(Math.floor(Math.random()*301)===0){
+    dr=Math.random()<0.5;
+    movet=Math.floor(Math.random()*501)+100; // 100~600
+  }
+  // 边界反弹（留出图片一半宽度，保持在屏幕内）
+  if(pos.x>window.innerWidth-SIZE/2){dr=false;pos.x=window.innerWidth-SIZE/2;}
+  if(pos.x<SIZE/2){dr=true;pos.x=SIZE/2;}
+  // 水平移动
+  if(movet>0){
+    if(dr)dx+=SPEED; else dx-=SPEED;
+    movet--;
+  }
+  // 重力/落地
+  if(pos.y<groundY())dy+=0.2;
+  if(pos.y>groundY()){
+    if(dy>0){dy=0;scaleY=1;}
+    pos.y=groundY();
+  }
+  // 位置更新
+  if(pos.y===groundY()){
+    pos.y+=dy;
+  }else{
+    pos.x+=dx;
+    pos.y+=dy;
+  }
+  // 阻尼
+  dx*=0.992;
+  timer++;
+  // 缩放变形: scaleX = 1/scaleY
+  scaleX=1/scaleY;
+  if(scaleY>1)scaleY-=(scaleY-1)/60;
+  // 渲染
+  pet.style.left=(pos.x-SIZE/2)+'px';
+  pet.style.top=(pos.y-SIZE/2)+'px';
+  pet.style.transform='scale('+scaleX+','+scaleY+')';
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+// 通知宿主页已就绪；宿主页会回发当前 pause/resume 状态完成同步
+parent.postMessage({type:'dsh:pet-ready'},'*');
+</script>
+</body>
+</html>

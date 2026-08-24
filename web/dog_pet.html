@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>神明吞噬者 - 桌宠</title>
+<!-- 桌宠内容页：由 assets/pet_html/dog_pet.html 派生；节段尺寸对齐克苏鲁之眼 160px 标准（间距同比放大）；
+     额外实现与宿主页的 postMessage 通信（宿主页发 dsh:pet pause/resume，本页回 dsh:pet-ack；加载完成发 dsh:pet-ready）。 -->
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;}#stage{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;}.seg{position:absolute;left:0;top:0;width:160px;height:160px;background-size:contain;background-repeat:no-repeat;background-position:center;transform-origin:center;will-change:transform,left,top;}.head{background-image:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5ZDbSAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAf/SURBVHhe7Z1diJRVGMd3sovoru9adBX7QpcsldKMBIswSBOECIJKM6SiD/EiiCiWyts+pUgQ7YMgQrGsC7ESzDY1/KhYF7PEL7aiqK66SirPmd/i/Men876zM6tz5vndPDOz875ndub8zvOcc96d7XIcx3Ecx3Ecx3FOplKNTouY3H3dP9WbgX1De0f1PT+rGp1McYNbBOZe2XtruH9g4LMQ3WCnqbjBTUbNBTfYaQlucJNQcy+6elKIO7Z8GOJ3AxtPy3vtBmeOG9wgGDvmvHHh/sTuq0LEXOhfvzLE0c694AZnjhss6MqTYhl7w4TLQ9x56McQT3fuBTc4czre4FQuxUzomTu+eityZNPhEDH31/2DITZr3psaUSxo1w3OnI4zuKyxFmosNGqumpqqzi20aneDM6flBls5ZLTnhSlzFTVTOTj0ffVWRM9HFX38j6MhWhQdSawRA6yRww3OnOFPu1WmcV7dXcEAenirjLbaB8tEJWU655kxZ0GIkBoJ1Fg1NfX6UjnfDc6cOoOtfUxo1DTOP2vho+E+aE8ta7SOPByXGjkUNaOosSnjrVyqqOkjNRfc4Myp+/RTPV+rwrJGWyaDZbRC9UnOY/6XIlVFq0lQNFdaIwHH6UoY6IoYVbieL/W+6OfhBmeOad81vfODadrTU4aVzZ2MFClDlEbNswxSrDVm0PZ/PvpL9Vbk8A/bQxx/xcwQQR+/dNwlIerrs9rXdsHad3aDM6fONq1KoWjuUrNTRtNe0RUdsHq2ZaoakcJq95NNH1dvRWgXg8dOvjBEOLbvtxCtxwGzqSmK/t6839a+sxucOabBqfmqZZrVw6yqDzBYsXJYynReh+ZGhfNZWEZhshoMMxf3Vm9Ftq8ZCLFRk7U9SF3z5QZnjpkf1WTLUMUySuE8zPfUVNCqE6g+wRoxGBk4vmyOLGoUv8dNd84LkeMtk3n8/adXh6i/38GvPwhx2fKXQtT3nXbd4A6nYlXNULS6LWo20OMVNc0yCXTfddqE2tph96HYw1Mmf/lRNFJrhYnX3xUi7T+2eHmIlsF6/Oz7Hw7xtkVTQ1zz5OYQMRijMVbBYNB23eAOpzJvwYr/NZieq2hOSq0QMQ99bc2LIWLSgdvjyAAXbxsK8c+9n4aoqCFq7J6urSFO7ZodIqjJ5MqxM2IuP7YjVsFb33ojRIzQEc6aXYDu8rAi2Lf+mROha/PaPSEqVrtaA7nBTg3DBlumYpr1cwvrOB4HDMbcZc/eGOLLz30VIiZjHD29MmFKiPB498LqrcirQ+tD1Mdf6e8LkdyqVS5Vra4MYRRr53fMja+HEYkaRVeWOO6e12O78N4jtfdBTWQESOV+X8nqUCr0EDUrZTTwPAwDXaFRtErWXAxzjvxevRXBYHKv5ty102vNXrTr2xBv7o7tLbmsO8Qp65aGqFUuOVJzImhuBEzCZM3FmsvByp1gtZfK/eAGZ07loaferOlZOu+0zOTnmmut51vVcm/POSGCmm/NF8nBmmO/GIrHWybr41M/fz7Eu1csCRHIkZZhjZpcFtopm/vBDc4c0+DU2qyaqwYwr4QtPeeHaFXLajLzU8CoJ2bFqKaqodx/p29aiKtWHQmR43i8d9EDIWou7lsYzbaqU7BMVlLz1RSNjhhucOYMG4yhOi9UEy30+EmTYrU6OBiNJYemqmU1l3npnlviSpBWxcC8l2qany9d2hPivX27Q9THMXvlYGyHFSdedyoXA4alaNRgKDtiuMGZM7ySpeZiHJBrgRxsHUcOVyP1vNbz1NzVP0WjgPksRjMfpqrWlSyef+2u2LO/mV5rgM6LrRpgpAY2i6IjhhucOZUXNmyo6QlqIPuk7B7plROWyeRundeqsZqrMYWVKqtKBoxUyMWYrVgrX5hscaYYXBQ3OHMq6/bvDAbrPiXmjfkrVrfsXlhXcnBVoVbRFhir+7C6QmWtTJGTya1gGT3Q//Ypzeuddd8pc5n1/HbDDc6cOoOnXRDnqUWv0FDYrzx+bly5slbEWFPmCguq5THzzw6xKMc3/h0iOfrd/gezMK9ZuMGZ4znYc7DTzvg82OfBTjvja9FVfC3aaUt8P9j3g512xq/J8muynHbGr4v266Kddsb/Nsn/NslpZ/zvg2Xe738f7LQV/h0d1fm27ktbubNsLvTv6HBain9PVhX/niynLTnlp34CKwcUNVUNVzgPPV+ra8Ac/bl/V6Ub7PxH3aeu5oIaYuVk7WlqlAWmKdqzMapoTeDfF+1kjWmwYlXTYBlr9SygvaLVOlg5ief7/2yIuMGZY9rFCowalcqtKWMBc/3/JsXZgL4+q31tF6xc7AZnTp1tahaM1FiwqnRIjRBAziZn0YNTFK0lFB0JrFzIeaHoCKLGMq/W86XeFze4wxj+tC1z2R2BssaCZa5lbNlcDhxn/T5Ae2CZp6SMBTUXMFTRkSP1+ope6+UGZ06dwUqjxoJlUqPGlmWkJkNRo6kJQM1UiuZ2KGuyG5w5LbHmZFo1MpSF15GqoiFlnmUW57P2h5WiK3hqtuJXVXYoo2rRmUDKZDXHwjKqaHWr6EhXdKRRdEXLDc6cjjNYKWt0apcKoxs1WbFqmBRucIfQ8QYrKWNSpmMyVbS1TztauMGZ4wY3SCp3Q+qaqVbjBmeOG9wkMJo1b0w+3bnYDc4cN7jJqMnQrHlxWdzgzHGDW4Sa7AY7LcENbjG6MuYGO47jOI7jOI7jOE6r6Or6F3DULuQfgvWXAAAAAElFTkSuQmCC");}.body{background-image:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5ZDbSAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAURSURBVHhe7d3Li5V1HMfxSf+CIC0GLzF2G4dABfNWQUYY5A0x3CoudKEg7cxoIY7uJLBFswjbBiFquhgiW1jeEBRivCveGCujVraThO9zPovzge/8zhzO8/x+8/Xz2vwcG89ziPM+39/zPHPpExEREREREREREREREZHn1QuttXHz+xf83/qjuTJ+OdtziWxaa5Wgshe8fMMO+/jMka9tVcm9pYKDK6ZgUMm9pYKDy17w60Mf2scz3hy0Fc7/cszWp/8+sLXuoqPu6lVwcNlfpVzyJ6tW2wonR0/Yemf8hq11FR11V6+Cgyum4OkvzraPB/rfsJVLvnD3tq2Pr1+1lYuGbovjgqHpvUCvqeDgink18iwG3l17UmUzLpGPz8f1Hr/0olVwcMW9+rySUQ5m9GTLhptjP9uaKhhwnHdenWdrp3sByF24Cg6u2PmRKjkFpYNXLnt7aI0dF/9+su8cKLvT49VNBQdXbMHglQxcdLflwmTfOfh4+Lzfx34s4v+tCg6uuIJREOMrXeCdr6Z2yx58Ppfszd7Sz49VcHDFFjyw+FP7GO7dOtf6UyVVMq4h8yxMPT6fz3qzn+H4uAvFchWtgoPLVnBqFmLmzn1tqa2z5r9k62/Hq/vDkCrZK4ofH1Dykg/W2YoZi8fFFS3GV7i4aBUstchW8Op1wxMWDChqxdr2+8MomQsG3E8+dPigrVwq8OPjcVEwcJnM++/eXqApKji47AXz7tgrDZZuGbL1+z3f2gooDsXs3PKZrZiNfzz401Ycj4+DGf/wyt+2vjL7ZVu9mZvCxz1xbI8Klt7LVjDu2ni7WPw97543DW+19dzhMVvx+V7BwLPYOw54Jc9ZNddWdn/0nq0oF88Dj6+CpRbZCt6+e6RtF41iUgXzbhr/bvp//9gKfN7qlbX2veW2Hj99xlbM+Ifnq9nJz6tTeHxQwVKL4goGnoko2JuZjy5Wd3P4PJRn5w8jp2zFeSt//TVK5sf38PNmeEf4Yv16FSy9l71gFIBXOvAMZJi53qzlK0sbt620FVIl83ksQ+GzllS7bODnjc/75sA2FSy9l61gXMnicnF+C53OWpR468ljW9myRe/byiXz+SvPbO/8FrAnSL0DaRcttcg+g4FnFs82lO0VfW1D+3mn560j1fksz+5u8RUy7x1JBUstss9gr1jALPOKvvlx+/3gmb+O2/rXu/227l9ZzdLPT1WzFLhk8O46eR/zlTX4aPNCW3/67pKt2kVLLbIVvO/oUSt4cLAqrVMoAlDKV3vP2gq7vlzW+lM7lOwVzNeqUyUDZi/ecVSwNEIzWDNYprJsBes8uBkqOLjsM1jXouulgoPLPoPxCk8VwHQ/uDMqOLjsBQOXyrNXX5PVHRUcXHEF8xUjlKSvi+6OCg4uW8H63qRmqODgshWs7w9uhgoOLnvBKSiOd8+YyfoZHRNTwcFlK1g/J6sZKji4bAV79LMqe0sFB1dswUw/L7o7Kji44gpmXBLT72yYmAoOrtiCJ1sS67Zk/d4kmVKKKzhVbqclAYqC1O6aj4vj8FeGeLtnpoKlVsUUnCoopdOiIFUwH7f0812PCg4u+6sP5fCVKu87DVKldlsUnod+h79MKcUUjNnH5Z4cre7/1j37uODc93F7RQUHl+3Vmdq1Nj378HxgqpcLKji47AXzrjXK7CuFCg6umIJVbj1UcHDZCwaVWw8VLCIiIiIiIiIiIiIiIiISUV/fM+peVsSPG9KgAAAAAElFTkSuQmCC");}.tail{background-image:url("data:image/png;base64,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");}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+const stage=document.getElementById('stage');
+const LENGTH=60,SPACING=61,SPEED=6,SIZE=160;
+let head={x:window.innerWidth/2,y:window.innerHeight/2,a:0};
+let dx=6,dy=0;
+const segs=[];
+function mk(cls){
+  const d=document.createElement('div');
+  d.className='seg '+cls;
+  stage.appendChild(d);
+  segs.push({el:d,x:head.x,y:head.y,a:0});
+  return segs[segs.length-1];
+}
+mk('head');
+for(let i=0;i<LENGTH;i++)mk('body');
+mk('tail');
+// 初始化：预展开身体，每个节段沿初始方向(向右, a=0)向后排列
+// 头在 head.x，身体向左后方延伸
+for(let i=0;i<segs.length;i++){
+  segs[i].x = head.x - i*SPACING;
+  segs[i].y = head.y;
+  segs[i].a = 0;
+  segs[i].el.style.left=(segs[i].x-SIZE/2)+'px';
+  segs[i].el.style.top=(segs[i].y-SIZE/2)+'px';
+  segs[i].el.style.transform='rotate(0deg)';
+}
+function rotateTo(now,to,speed){
+  let tz;
+  if(Math.abs(now+360-to)<Math.abs(to-now))tz=to-now-360;
+  else if(Math.abs(to+360-now)<Math.abs(to-now))tz=to+360-now;
+  else tz=to-now;
+  if(tz>speed)tz=speed;
+  if(tz<-speed)tz=-speed;
+  return now+tz;
+}
+function ag(x,y){return Math.atan2(y,x)*180/Math.PI;}
+function getDist(x1,y1,x2,y2){return Math.hypot(x2-x1,y2-y1);}
+// 宿主页通信：接收 dsh:pet pause/resume 命令并回 ack；pause 时冻结动画循环省 CPU
+let running=true;
+window.addEventListener('message',(ev)=>{
+  const d=ev.data;
+  if(!d||d.type!=='dsh:pet')return;
+  if(d.command==='pause')running=false;
+  else if(d.command==='resume')running=true;
+  if(ev.source)ev.source.postMessage({type:'dsh:pet-ack',command:d.command,running:running},'*');
+});
+function tick(){
+  if(running){
+  const cx=window.innerWidth/2,cy=window.innerHeight/2;
+  if(getDist(head.x,head.y,cx,cy)>760){
+    head.a=rotateTo(head.a,ag(cx-head.x,cy-head.y),0.6);
+  }
+  const r=head.a*Math.PI/180;
+  dx=Math.cos(r)*SPEED;
+  dy=Math.sin(r)*SPEED;
+  head.x+=dx;head.y+=dy;
+  // 平滑头部角度到瞬时移动方向，避免 atan2 不连续导致图像突然翻转
+  const targetHeadA=ag(dx,dy);
+  head.a=rotateTo(head.a,targetHeadA,5);
+  // follow chain
+  let prev={x:head.x,y:head.y};
+  for(let i=0;i<segs.length;i++){
+    const s=segs[i];
+    if(i===0){s.x=head.x;s.y=head.y;s.a=head.a;}
+    else{
+      const ang=ag(prev.x-s.x,prev.y-s.y);
+      s.x=prev.x-Math.cos(ang*Math.PI/180)*SPACING;
+      s.y=prev.y-Math.sin(ang*Math.PI/180)*SPACING;
+      // 平滑节段角度到指向前一节段的方向
+      s.a=rotateTo(s.a,ang,8);
+    }
+    s.el.style.left=(s.x-SIZE/2)+'px';
+    s.el.style.top=(s.y-SIZE/2)+'px';
+    s.el.style.transform='rotate('+s.a+'deg)';
+    prev=s;
+  }
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+// 通知宿主页已就绪；宿主页会回发当前 pause/resume 状态完成同步
+parent.postMessage({type:'dsh:pet-ready'},'*');
+</script>
+</body>
+</html>
