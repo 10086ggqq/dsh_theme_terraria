@@ -195,6 +195,15 @@ body {
   image-rendering: pixelated;
 }
 .msg.bot .msg-name { font-size: 12px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 var(--black); margin-bottom: 6px; }
+/* 消息/思考/工具输出文本可选中复制（body 全局 user-select:none 的例外区） */
+.msg-text, .tool-body, .msg-reasoning .r-body { user-select: text; }
+.msg-name { display: flex; align-items: center; gap: 8px; }
+/* 消息复制按钮：随名牌行右置，悬停金色高亮 */
+.msg-copy {
+  margin-left: auto; font-family: inherit; font-size: 11px; padding: 1px 8px; cursor: pointer;
+  background: rgba(0,0,0,0.3); color: var(--stone); border: 1px solid rgba(255,255,255,0.18); border-radius: 3px;
+}
+.msg-copy:hover { color: var(--gold); border-color: var(--gold); }
 .msg.bot .msg-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55; font-size: 20px; color: #c8c8d8; text-shadow: 2px 2px 0 #1a1a3a; }
 .msg-reasoning {
   margin-bottom: 8px;
@@ -890,6 +899,38 @@ function blocksReasoning(content) {
   return content.filter(b => b && b.type === 'reasoning').map(b => b.text).join('\n')
 }
 
+/** 复制文本到剪贴板：优先 Clipboard API（安全上下文），退回 execCommand 兼容局域网 HTTP 访问。 */
+function copyText(text) {
+  const t = String(text ?? '')
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = t
+      ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none'
+      document.body.appendChild(ta)
+      ta.select()
+      const ok = document.execCommand('copy')
+      ta.remove()
+      return ok
+    } catch { return false }
+  }
+  const done = ok => toast(ok ? '已复制到剪贴板' : '复制失败', ok ? 'ok' : 'err')
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(t).then(() => done(true), () => done(fallback()))
+  } else {
+    done(fallback())
+  }
+}
+/** 构建消息复制按钮；getText 闭包取实时文本，流式消息定稿前后都可复制。 */
+function msgCopyBtn(getText) {
+  const btn = document.createElement('button')
+  btn.className = 'msg-copy'
+  btn.type = 'button'
+  btn.textContent = '复制'
+  btn.addEventListener('click', () => copyText(getText()))
+  return btn
+}
+
 function appendUserMsg(text, pending) {
   const el = document.createElement('div')
   el.className = 'msg user'
@@ -902,6 +943,7 @@ function appendUserMsg(text, pending) {
   const body = document.createElement('div')
   body.className = 'msg-text'
   body.textContent = text
+  name.appendChild(msgCopyBtn(() => body.textContent))
   bubble.appendChild(name); bubble.appendChild(body)
   el.appendChild(bubble)
   $('#messages').appendChild(el)
@@ -938,6 +980,9 @@ function finalizeAssistant(message, usage) {
   const reasoning = blocksReasoning(message.content)
   const body = state.streamEl || startAssistantStream()
   body.textContent = text
+  // 名牌行补复制按钮（历史回放与实时流共用本函数；stream 中途无按钮，定稿即有）
+  const nameRow = body.parentNode ? body.parentNode.querySelector('.msg-name') : null
+  if (nameRow && !nameRow.querySelector('.msg-copy')) nameRow.appendChild(msgCopyBtn(() => body.textContent))
   if (reasoning) {
     const det = document.createElement('details')
     det.className = 'msg-reasoning'
@@ -1056,6 +1101,9 @@ function handleSessionEvent(sid, event, replay) {
   const d = event.data || {}
   switch (event.type) {
     case 'user/message': {
+      /* 系统注入的上下文（skills 目录、工作区规则等）source.kind 不是 'user'，
+         官方 UI 将其渲染为低权重 context 节点；这里直接跳过，不进入聊天流。 */
+      if (d.source && d.source.kind !== 'user') break
       const text = blocksText(d.content) || '(非文本消息)'
       if (!replay && state.pendingUserText === text) {
         removePendingUserMsgs()
@@ -1493,19 +1541,35 @@ function loadPersonaMdFile(file, onProgress, onDone) {
 }
 /* ---------- 桌宠层（每只桌宠独立 iframe） ---------- */
 // 按 PETS 清单注入桌宠层：插在 modal-root 之前保持层级（弹窗 100 > 桌宠 90）
+// iframe 懒加载：仅启用的桌宠挂载 iframe，禁用的零加载；缺失文件被 SPA 回退成主页面时守卫移除，防无限递归
 PETS.forEach(p => {
   const layer = document.createElement('div')
   layer.id = 'pet-layer-' + p.id
   layer.className = 'pet-layer'
   layer.setAttribute('aria-hidden', 'true')
+  document.body.insertBefore(layer, $('#modal-root'))
+})
+/** 挂载指定桌宠的 iframe（启用时调用）。若页面文件缺失被服务器回退成主页面（title 相同），移除 iframe 防递归。 */
+function mountPetFrame(p) {
+  const layer = $('#pet-layer-' + p.id)
+  if (!layer || $('#pet-frame-' + p.id)) return
   const f = document.createElement('iframe')
   f.id = 'pet-frame-' + p.id
   f.src = p.page
   f.title = '桌宠：' + p.name
   f.tabIndex = -1
+  f.addEventListener('load', () => {
+    try {
+      const doc = f.contentDocument
+      // 同源守卫：桌宠页 title 是「XX - 桌宠」格式；等于主页面 title 说明服务器把缺失文件回退成了完整页面（SPA 语义），留着会 1→N 无限递归撑爆内存
+      if (doc && doc.title === document.title) {
+        console.warn('桌宠页面缺失（' + p.page + ' 被服务器回退为主页面），已停用该桌宠 iframe')
+        f.remove()
+      }
+    } catch { /* 跨源（异常场景）忽略 */ }
+  })
   layer.appendChild(f)
-  document.body.insertBefore(layer, $('#modal-root'))
-})
+}
 /** 向指定桌宠 iframe 发送命令（pause/resume 控制其动画循环）。 */
 function petPost(id, msg) {
   const f = $('#pet-frame-' + id)
@@ -1522,6 +1586,8 @@ function setPetVisible(id, on) {
   localStorage.setItem('terraria.pet.' + id, state.pets[id] ? '1' : '0')
   const layer = $('#pet-layer-' + id)
   if (layer) layer.classList.toggle('pet-on', state.pets[id])
+  // 懒加载：首次启用（或守卫移除后重新启用）时挂载 iframe；页面缺失导致的移除会随再次开关重试
+  if (state.pets[id]) mountPetFrame(PETS.find(p => p.id === id))
   petPost(id, { type: 'dsh:pet', command: state.pets[id] ? 'resume' : 'pause' })
 }
 // iframe 通信：按 contentWindow 识别来源桌宠，加载完成（dsh:pet-ready）后下发当前状态完成同步；ack 仅确认送达
@@ -2032,10 +2098,194 @@ async function openModelPicker() {
   }
   if (body.children.length === 0) {
     const el = document.createElement('div')
-    el.textContent = '没有可用模型。请先在设置中配置 API 密钥。'
+    el.textContent = '没有可用模型。请先在设置中配置 API 密钥，或添加自定义提供方。'
     body.appendChild(el)
   }
+  // 已占用路由：session.models 分组 + llm.providers 目录（休眠路由也计入，防止遮蔽既有提供方）
+  const takenRoutes = new Set((v.groups || []).map(g => g.id))
+  try {
+    const lp = await rpc('llm.providers', {})
+    for (const p of lp.providers || []) takenRoutes.add(p.provider)
+  } catch { /* 目录不可用时按已知分组判断，不阻塞入口 */ }
+  const addRow = document.createElement('div')
+  addRow.className = 'list-row'
+  const addMain = document.createElement('div')
+  addMain.className = 'r-main'
+  const addName = document.createElement('div')
+  addName.className = 'r-name'
+  addName.textContent = '＋ 添加自定义提供方…'
+  const addMeta = document.createElement('div')
+  addMeta.className = 'r-meta'
+  addMeta.textContent = 'OpenAI / Anthropic 兼容网关：填接口地址与密钥即可加入模型列表'
+  addMain.appendChild(addName); addMain.appendChild(addMeta)
+  addRow.appendChild(addMain)
+  addRow.addEventListener('click', () => openCustomProviderForm([...takenRoutes]))
+  body.appendChild(addRow)
   openModal('模型选择', body, [{ label: '关闭', onClick: () => { } }])
+}
+
+/* ---------- 自定义模型提供方 ---------- */
+/** 自定义提供方写入的设置命名空间（pi-ai 适配器：OpenAI/Anthropic 兼容网关，保存即生效）。 */
+const CUSTOM_PROVIDER_NS = 'llm-pi-ai'
+/** pi-ai 适配器接受的线路协议；默认 openai-completions（绝大多数兼容网关）。 */
+const CUSTOM_PROVIDER_PROTOCOLS = ['openai-completions', 'openai-responses', 'anthropic-messages']
+/** 提供方路由 id 约束：小写字母开头的小写字母/数字/连字符（凭证引用是 POSIX 标识符，不能以数字开头）。 */
+const ROUTE_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+/** 由路由 id 派生凭证引用名（与官方 UI 同规则：大写、非字母数字段转下划线、_API_KEY 结尾）。 */
+function deriveKeyRef(route) {
+  return route.toUpperCase().replace(/[^A-Z0-9]+/g, '_') + '_API_KEY'
+}
+/**
+ * 打开「添加自定义提供方」表单：路由 id、显示名、接口地址、协议、密钥（可空）、模型列表。
+ * 保存 = settings.mutate 写 llm-pi-ai 命名空间的 providers.<route>（pi-ai 即时注册路由），
+ * 密钥另经 credentials.set 存宿主机；成功后重开模型选择，新提供方已入列。
+ * @param {string[]} taken - 已占用的路由 id（含休眠路由），新 id 不得遮蔽。
+ */
+function openCustomProviderForm(taken) {
+  const body = document.createElement('div')
+  const hint = document.createElement('div')
+  hint.style.cssText = 'font-size:12px;color:var(--stone)'
+  hint.textContent = '添加 OpenAI / Anthropic 兼容网关（如 one-api、new-api、vLLM、OpenRouter）。保存后立即出现在模型列表，无需重启。'
+  body.appendChild(hint)
+  /** 表单字段行：火把橙标签 + 控件 + 可选灰字说明。 */
+  const fieldRow = (labelText, control, note) => {
+    const row = document.createElement('div')
+    row.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin-top:9px'
+    const label = document.createElement('div')
+    label.style.cssText = 'font-size:12px;color:var(--torch);text-shadow:1px 1px 0 var(--black);letter-spacing:1px'
+    label.textContent = labelText
+    row.appendChild(label)
+    row.appendChild(control)
+    if (note) {
+      const n = document.createElement('div')
+      n.style.cssText = 'font-size:11px;color:var(--stone)'
+      n.textContent = note
+      row.appendChild(n)
+    }
+    body.appendChild(row)
+    return row
+  }
+  const mkInput = (type, placeholder) => {
+    const el = document.createElement('input')
+    el.className = 'pixel-input'
+    el.type = type
+    el.placeholder = placeholder
+    el.style.cssText = 'width:100%;box-sizing:border-box'
+    return el
+  }
+  const routeInput = mkInput('text', 'my-gateway')
+  fieldRow('提供方 ID', routeInput, '小写字母开头，仅小写字母/数字/连字符；用作模型分组标识与密钥名')
+  const nameInput = mkInput('text', '')
+  fieldRow('显示名称（可选）', nameInput, '留空则显示提供方 ID')
+  const urlInput = mkInput('text', 'https://gateway.example/v1')
+  fieldRow('接口地址（baseURL）', urlInput)
+  const protoSelect = document.createElement('select')
+  protoSelect.className = 'pixel-input'
+  protoSelect.style.cssText = 'width:100%;box-sizing:border-box'
+  for (const p of CUSTOM_PROVIDER_PROTOCOLS) {
+    const opt = document.createElement('option')
+    opt.value = p
+    opt.textContent = p
+    protoSelect.appendChild(opt)
+  }
+  fieldRow('接口协议', protoSelect, '绝大多数兼容网关选 openai-completions')
+  const keyInput = mkInput('password', '')
+  fieldRow('API 密钥（可选）', keyInput, '留空则走网关自身鉴权；填写则加密存宿主机凭证库')
+  // 模型列表 + 「获取模型列表」：llm.discoverModels 只探测草稿配置，不写任何东西
+  const modelsTa = document.createElement('textarea')
+  modelsTa.className = 'pixel-input'
+  modelsTa.rows = 3
+  modelsTa.placeholder = '每行一个模型 id，如：\ndeepseek-chat\ngpt-4o-mini'
+  modelsTa.style.cssText = 'width:100%;box-sizing:border-box;resize:vertical;font-family:inherit'
+  const fetchBtn = document.createElement('button')
+  fetchBtn.className = 'pixel-btn btn-sm'
+  fetchBtn.type = 'button'
+  fetchBtn.style.marginLeft = '8px'
+  fetchBtn.textContent = '获取模型列表'
+  let discovered = new Map()
+  fetchBtn.addEventListener('click', async () => {
+    const baseURL = urlInput.value.trim()
+    if (!baseURL) { toast('请先填写接口地址', 'err'); return }
+    fetchBtn.disabled = true
+    fetchBtn.textContent = '获取中…'
+    try {
+      const v = await rpc('llm.discoverModels', {
+        settingsNs: CUSTOM_PROVIDER_NS,
+        baseURL,
+        api: protoSelect.value,
+        ...(keyInput.value.trim() ? { apiKey: keyInput.value.trim() } : {}),
+      })
+      const models = v.models || []
+      if (models.length === 0) { toast('该地址未返回任何模型，请检查地址/协议/密钥', 'err') }
+      else {
+        discovered = new Map(models.map(m => [m.id, m]))
+        modelsTa.value = models.map(m => m.id).join('\n')
+        toast('发现 ' + models.length + ' 个模型', 'ok')
+      }
+    } catch (e) { toast('获取失败: ' + e.message, 'err') }
+    finally { fetchBtn.disabled = false; fetchBtn.textContent = '获取模型列表' }
+  })
+  const modelsRow = document.createElement('div')
+  modelsRow.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin-top:9px'
+  const modelsLabelRow = document.createElement('div')
+  modelsLabelRow.style.cssText = 'display:flex;align-items:center'
+  const modelsLabel = document.createElement('div')
+  modelsLabel.style.cssText = 'font-size:12px;color:var(--torch);text-shadow:1px 1px 0 var(--black);letter-spacing:1px'
+  modelsLabel.textContent = '模型列表'
+  modelsLabelRow.appendChild(modelsLabel); modelsLabelRow.appendChild(fetchBtn)
+  modelsRow.appendChild(modelsLabelRow); modelsRow.appendChild(modelsTa)
+  const modelsNote = document.createElement('div')
+  modelsNote.style.cssText = 'font-size:11px;color:var(--stone)'
+  modelsNote.textContent = '至少一个；可手填，或填好地址/协议/密钥后点「获取模型列表」自动拉取'
+  modelsRow.appendChild(modelsNote)
+  body.appendChild(modelsRow)
+  /** 提交：校验 → settings.mutate 写 profile →（可选）credentials.set 存密钥 → 重开模型选择。 */
+  const submit = async () => {
+    const route = routeInput.value.trim()
+    const displayName = nameInput.value.trim()
+    const baseURL = urlInput.value.trim()
+    const key = keyInput.value.trim()
+    const modelIds = modelsTa.value.split('\n').map(s => s.trim()).filter(Boolean)
+    if (!ROUTE_ID_RE.test(route)) { toast('提供方 ID 需以小写字母开头，仅含小写字母/数字/连字符', 'err'); return }
+    if (taken.includes(route)) { toast('提供方 ID 已存在：' + route, 'err'); return }
+    if (!/^https?:\/\//.test(baseURL)) { toast('接口地址需以 http:// 或 https:// 开头', 'err'); return }
+    if (modelIds.length === 0) { toast('请至少填写一个模型 id', 'err'); return }
+    createBtn.disabled = true
+    try {
+      const keyRef = deriveKeyRef(route)
+      const profile = {
+        ...(displayName ? { displayName } : {}),
+        ...(key ? { apiKeyEnv: keyRef } : {}),
+        api: protoSelect.value,
+        baseURL,
+        models: modelIds.map(id => {
+          const d = discovered.get(id) || {}
+          return { id, ...(d.name ? { name: d.name } : {}), ...(d.contextWindow ? { contextWindow: d.contextWindow } : {}), ...(d.maxTokens ? { maxTokens: d.maxTokens } : {}) }
+        }),
+      }
+      // 不带 expectedRevision：写入仍经 schema 校验（非法协议/模型当场被拒），且密钥保存失败后重试不会被版本冲突卡死
+      await rpc('settings.mutate', { ns: CUSTOM_PROVIDER_NS, ops: [{ op: 'set', path: ['providers', route], value: profile }] })
+      if (key) await rpc('credentials.set', { ref: keyRef, value: key })
+      toast('已添加提供方 ' + route + (key ? '（密钥已保存）' : ''), 'ok')
+      openModelPicker()
+    } catch (e) {
+      toast('添加失败: ' + e.message, 'err')
+      createBtn.disabled = false
+    }
+  }
+  const createBtn = document.createElement('button')
+  createBtn.className = 'pixel-btn btn-sm btn-gold'
+  createBtn.type = 'button'
+  createBtn.textContent = '创建提供方'
+  createBtn.addEventListener('click', submit)
+  // 提交按钮随表单置于底部（不走 openModal actions：那会先关窗，失败重试就丢了表单）
+  const actions = document.createElement('div')
+  actions.style.cssText = 'display:flex;justify-content:flex-end;margin-top:12px'
+  actions.appendChild(createBtn)
+  body.appendChild(actions)
+  openModal('添加自定义提供方', body, [
+    { label: '返回', onClick: () => openModelPicker() },
+  ])
 }
 
 function applyModel(sel) {
