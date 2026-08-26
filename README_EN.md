@@ -4,7 +4,7 @@
 >
 > [中文版](./README.md)
 
-[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/10086ggqq/dsh_theme_terraria)
+[![DSH Market 已收录](https://img.shields.io/badge/DSH%20Market-已收录-447acc)](https://dsh.market/?q=10086ggqq/dsh_theme_terraria)
 
 ![Title Screen](screenshots/title-screen.png)
 
