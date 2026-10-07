@@ -30,7 +30,7 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-web-app": "^0.1.0-rc.5"
+    "@deepseek-ai/dsh-web-app": ">=0.1.0-rc.5"
   },
   "repository": {
     "type": "git",

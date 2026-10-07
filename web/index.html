@@ -689,17 +689,18 @@ body {
 <script>
 /* ============================================================
    Terraria UI 原生客户端：直接对话 dsh web 的 /api JSON-RPC 网关
-   一元调用 POST /api/<method>；事件流 WebSocket /api/events.mux
+   一元调用 POST /api/<命名空间>/<方法>；事件流 WebSocket /api/remote.mux
+   （`$events` 承载审批/提问，`session/follow` 承载单会话历史与流式输出）
    ============================================================ */
 'use strict'
 const $ = (sel) => document.querySelector(sel)
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
 const KEY_REF = 'DEEPSEEK_API_KEY'
-const PRESET_NAMES = { standard: '旅途', code: '软核', minimal: '中核', cordis: '硬核' }
+const PRESET_NAMES = { standard: '旅途', ptc: '软核', minimal: '中核', cordis: '硬核' }
 /** 模式选择弹窗的四个难度档：id 对应 agent preset，cls 控制按钮配色，desc 为右侧说明。 */
 const MODE_META = [
   { id: 'standard', cls: 'travel', desc: '功能完整的编码 Agent：编辑、Shell、检索、技能、计划、子代理。' },
-  { id: 'code', cls: 'soft', desc: '标准全部能力，并用 Code Mode SDK 以一个程序组合多步操作。' },
+  { id: 'ptc', cls: 'soft', desc: '标准全部能力，并用 Code Mode SDK 以一个程序组合多步操作。' },
   { id: 'minimal', cls: 'medium', desc: '仅持久 bash 与编辑器双工具的极简 Agent。' },
   { id: 'cordis', cls: 'hard', desc: '用于创建自定义 preset：标准全部能力 + 运行时检查与实验。' },
 ]
@@ -743,29 +744,144 @@ const rawBgmVol = localStorage.getItem('terraria.bgmVol')
 const savedBgmVol = rawBgmVol === null ? NaN : Number(rawBgmVol)
 state.bgmVol = Number.isFinite(savedBgmVol) && savedBgmVol >= 0 && savedBgmVol <= 1 ? savedBgmVol : 0.5
 
-/* ---------- 基础 RPC ---------- */
+/* ============================================================
+   传输层：dsh 0.2.x
+   ------------------------------------------------------------
+   与 0.1.x 的两处协议差异都由本层吸收，上层的渲染代码保持不变：
+     1. 一元 RPC 的端点是 `命名空间/方法`（斜杠），参数必须包在
+        `payload.args` 里；返回体形状也多有调整。
+     2. 事件不再走 `/api/events.mux`，而是 `/api/remote.mux` 上的
+        逻辑流：`$events` 承载审批/提问/状态，`session/follow`
+        承载单会话的历史与流式输出。
+   ============================================================ */
 class RpcError extends Error {
   constructor(code, message) { super(message); this.code = code }
 }
-async function rpc(method, payload) {
-  const res = await fetch('/api/' + method, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-request', rpcId: crypto.randomUUID(), method, payload }),
-  })
-  if (!res.ok) throw new Error('传输失败 ' + method + ': HTTP ' + res.status)
-  const full = await res.json()
-  if (!full.result.ok) throw new RpcError(full.result.error.code, full.result.error.message)
-  return full.result.value
+
+/** 把 0.2.x 的 `session/modelCatalog` 结果翻译成旧版的 `session.models` 形状。 */
+function adaptModelCatalog(v) {
+  if (!v || typeof v !== 'object') return { groups: [], current: null, failures: [] }
+  return {
+    groups: v.groups || [],
+    current: v.current || v.default || null,
+    failures: v.failures || [],
+  }
 }
-async function rpcRespond(rpcId, value) {
-  const res = await fetch('/api/respond', {
+
+/**
+ * 旧方法名 -> 0.2.x 端点。`args` 把旧调用参数翻译成新端点要求的键，
+ * `value` 把返回值翻译回旧形状（缺省为原样返回）。
+ */
+const ENDPOINTS = {
+  'credentials.describe': { method: 'credentials/describe', args: a => ({ refs: a.refs }) },
+  'credentials.set': { method: 'credentials/set', args: a => ({ ref: a.ref, value: a.value }) },
+
+  'agentPreset.list': { method: 'agentPresets/list', args: () => ({}) },
+  'agentPreset.read': { method: 'agentPresets/read', args: a => ({ agentPreset: a.agentPreset }) },
+  'agentPreset.select': { method: 'agentPresets/select', args: a => ({ agentId: a.sessionId, agentPreset: a.agentPreset }) },
+
+  'session.create': { method: 'session/create', args: a => ({ request: a.workspaceId ? { workspaceId: a.workspaceId } : a.cwd ? { cwd: a.cwd } : {} }) },
+  'session.list': { method: 'session/list', args: () => ({ _request: {} }) },
+  'session.prompt': { method: 'session/prompt', args: a => ({ request: { requestId: crypto.randomUUID(), sessionId: a.sessionId, mode: a.mode || 'queue', content: a.content, clientTimeZone: a.clientTimeZone } }) },
+  'session.cancel': { method: 'session/cancel', args: a => ({ request: { sessionId: a.sessionId } }) },
+  'session.models': { method: 'session/modelCatalog', args: () => ({}), value: adaptModelCatalog },
+  'session.selectModel': { method: 'session/selectModel', args: a => ({ request: { sessionId: a.sessionId, provider: a.provider, model: a.model, ...(a.reasoningEffort ? { reasoningEffort: a.reasoningEffort } : {}) } }) },
+  'session.rename': { method: 'session/rename', args: a => ({ request: { sessionId: a.sessionId, title: a.title } }) },
+
+  'workspace.create': { method: 'workspace/create', args: a => ({ request: { path: a.path } }) },
+
+  'llm.providers': { method: 'llm/listProviders', args: () => ({}), value: v => ({ providers: (Array.isArray(v) ? v : []).map(p => ({ provider: p.id, name: p.name })) }) },
+  'llm.discoverModels': { method: 'llm/discoverModels', args: a => ({ settingsNs: a.settingsNs || CUSTOM_PROVIDER_NS, request: a.request || {} }) },
+
+  'settings.mutate': { method: 'settings/mutate', args: a => ({ ns: a.ns, ops: a.ops }) },
+
+  // 事件瀑布（审批 / 提问）的应答端点是普通一元 RPC，参数不加包装。
+  '$events.result': { method: '$events/result', args: a => a, raw: true },
+}
+
+/**
+ * 一元 RPC。`method` 沿用调用点的旧名字，由 ENDPOINTS 翻译。
+ * @param {string} method 旧方法名（如 'session.list'）
+ * @param {object} payload 旧调用参数
+ */
+async function rpc(method, payload = {}) {
+  // 0.2.x 没有 workspace/list：工作空间目录是 workspace/follow 流的首帧 baseline。
+  if (method === 'workspace.list') return workspaceList()
+  const spec = ENDPOINTS[method]
+  if (!spec) throw new Error('未映射的方法: ' + method)
+  const res = await fetch('/api/' + spec.method, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'client-response', rpcId, result: { ok: true, value } }),
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId: crypto.randomUUID(),
+      method: spec.method,
+      payload: { args: spec.args(payload) },
+    }),
   })
-  if (!res.ok) throw new Error('应答失败: HTTP ' + res.status)
-  return res.json()
+  if (!res.ok) throw new Error('传输失败 ' + spec.method + ': HTTP ' + res.status)
+  const full = await res.json()
+  if (!full.result || full.result.ok !== true) {
+    const err = full.result && full.result.error
+    throw new RpcError(err ? err.code : 'gateway/internal', err ? err.message : '未知错误')
+  }
+  return spec.value ? spec.value(full.result.value) : full.result.value
+}
+
+/* ---------- mux：/api/remote.mux 上的逻辑流客户端 ---------- */
+const mux = {
+  ws: null,
+  ready: false,
+  clientId: null,
+  streams: new Map(),
+  follows: new Map(),
+  seq: 0,
+}
+
+function muxNewStreamId() {
+  mux.seq += 1
+  return 's' + mux.seq + '-' + Math.random().toString(16).slice(2, 10)
+}
+
+/** 打开一条逻辑流。onItem 收到每个 value，onEnd/onError 收到流终止。 */
+function muxOpen(endpoint, args, handlers, halfClose) {
+  if (!mux.ready) throw new Error('事件通道尚未连接')
+  const streamId = muxNewStreamId()
+  mux.streams.set(streamId, handlers || {})
+  mux.ws.send(JSON.stringify({ type: 'open', streamId, endpoint, payload: { args } }))
+  if (halfClose) mux.ws.send(JSON.stringify({ type: 'end', streamId }))
+  return streamId
+}
+
+function muxClose(streamId) {
+  if (!mux.streams.has(streamId)) return
+  mux.streams.delete(streamId)
+  if (mux.ready) {
+    try { mux.ws.send(JSON.stringify({ type: 'cancel', streamId })) } catch { /* 已断开 */ }
+  }
+}
+
+/** 应答一个瀑布事件（审批 / 提问）。value 为 {kind:'result', value} 等。 */
+function answerWaterfall(eventId, outcome) {
+  return rpc('$events.result', { clientId: mux.clientId, eventId, outcome })
+}
+
+/** 读取工作空间目录：workspace/follow 的首帧 baseline 即全量清单。 */
+function workspaceList() {
+  return new Promise((resolve, reject) => {
+    if (!mux.ready) { reject(new Error('事件通道尚未连接')); return }
+    let done = false
+    const sid = muxOpen('workspace/follow', {}, {
+      onItem: (v) => {
+        if (done || !v || v.type !== 'baseline') return
+        done = true
+        resolve(v.value || { items: [] })
+        muxClose(sid)
+      },
+      onEnd: () => { if (!done) { done = true; reject(new Error('工作空间流已结束')) } },
+      onError: (e) => { if (!done) { done = true; reject(e) } },
+    }, true)
+  })
 }
 
 /* ---------- toast / 终端镜像 ---------- */
@@ -839,22 +955,35 @@ function setConn(on) {
   $('#conn-label').textContent = on ? '已连接到向导世界' : '连接已断开，重连中…'
 }
 
-/* ---------- WebSocket 事件流 ---------- */
+/* ---------- 事件通道（/api/remote.mux） ---------- */
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   let ws
-  try { ws = new WebSocket(proto + '//' + location.host + '/api/events.mux') } catch { scheduleReconnect(); return }
+  try { ws = new WebSocket(proto + '//' + location.host + '/api/remote.mux') } catch { scheduleReconnect(); return }
+  mux.ws = ws
   state.ws = ws
   ws.addEventListener('open', () => {
+    mux.ready = true
     setConn(true)
-    if (state.sessionId && !state.historyLoaded) loadHistory()
+    openEventStream()
+    /* 重连后重新订阅当前会话，否则流式输出会静默丢失。 */
+    if (state.sessionId && state.historyLoaded) {
+      followSession(state.sessionId).catch(() => {})
+    }
   })
   ws.addEventListener('message', (ev) => {
-    let full
-    try { full = JSON.parse(ev.data) } catch { return }
-    if (full.type === 'server-request') handleServerRequest(full)
+    let frame
+    try { frame = JSON.parse(ev.data) } catch { return }
+    handleMuxFrame(frame)
   })
-  ws.addEventListener('close', () => { setConn(false); scheduleReconnect() })
+  ws.addEventListener('close', () => {
+    mux.ready = false
+    mux.clientId = null
+    mux.streams.clear()
+    mux.follows.clear()
+    setConn(false)
+    scheduleReconnect()
+  })
   ws.addEventListener('error', () => { })
 }
 function scheduleReconnect() {
@@ -862,30 +991,123 @@ function scheduleReconnect() {
   state.wsTimer = setTimeout(() => { state.wsTimer = null; connectWs() }, 2000)
 }
 
-function handleServerRequest(full) {
-  const p = full.payload
-  if (!p || typeof p !== 'object') return
-  switch (p.type) {
-    case 'session/event':
-      handleSessionEvent(p.sessionId, p.event, false)
-      break
-    case 'session/subscribed':
-      if (p.sessionId === state.sessionId && !state.historyLoaded && p.lastSeq >= 0) loadHistory()
-      break
-    case 'approval/requested':
-      handleApproval(full.rpcId, p)
-      break
-    case 'question/requested':
-      handleQuestion(full.rpcId, p)
-      break
-    case 'session/queue':
-      termLine('队列更新：' + p.items.length + ' 条待处理', 't-dim')
-      break
-    case 'stream/error':
-      toast('事件流错误：' + (p.error && p.error.message ? p.error.message : '未知'), 'err')
-      break
-    default:
-      break
+/** 分流 mux 帧：item 交给对应流，end/error 结束该流。 */
+function handleMuxFrame(frame) {
+  if (!frame || typeof frame !== 'object') return
+  const s = frame.streamId ? mux.streams.get(frame.streamId) : undefined
+  if (frame.type === 'item') {
+    if (s && s.onItem) s.onItem(frame.value)
+    return
+  }
+  if (frame.type === 'end') {
+    if (s) {
+      mux.streams.delete(frame.streamId)
+      if (s.onEnd) s.onEnd()
+    }
+    return
+  }
+  if (frame.type === 'error') {
+    mux.streams.delete(frame.streamId)
+    const msg = frame.error && frame.error.message ? frame.error.message : '未知'
+    if (s && s.onError) s.onError(new Error(msg))
+    else toast('事件流错误：' + msg, 'err')
+  }
+}
+
+/* ---------- $events：审批 / 提问 / 会话状态 ---------- */
+function openEventStream() {
+  muxOpen('$events', {}, {
+    onItem: (v) => {
+      if (!v || typeof v !== 'object') return
+      if (v.type === 'ready') { mux.clientId = v.clientId; return }
+      if (v.type === 'cancel') return
+      if (v.type === 'emit') { handleForwardedEmit(v.event, v.args); return }
+      if (v.type === 'waterfall') {
+        if (v.event === 'approval/request') handleApproval(v.eventId, v.request || {})
+        else if (v.event === 'user-questions/request') handleQuestion(v.eventId, v.request || {})
+        else answerWaterfall(v.eventId, { kind: 'next' })
+      }
+    },
+    onError: (e) => toast('事件通道错误：' + e.message, 'err'),
+  })
+}
+
+function handleForwardedEmit(event, args) {
+  if (event === 'api-session/status') {
+    const [sid, running] = args || []
+    if (sid === state.sessionId) setRunning(Boolean(running))
+    return
+  }
+  if (event === 'agent-preset/selected') {
+    const [sid, preset] = args || []
+    if (sid === state.sessionId && preset) {
+      state.agentPreset = typeof preset === 'string' ? preset : preset.id
+    }
+  }
+}
+
+/* ---------- session/follow：单会话历史 + 流式输出 ---------- */
+/** 打开（或重开）某会话的 follow 流；resolve 于首帧 snapshot 到达时。 */
+function followSession(sessionId) {
+  return new Promise((resolve, reject) => {
+    if (!mux.ready) { reject(new Error('事件通道尚未连接')); return }
+    const old = mux.follows.get(sessionId)
+    if (old) muxClose(old)
+    let revision = 0
+    let settled = false
+    let sid = null
+    sid = muxOpen(
+      'session/follow',
+      { request: { address: { kind: 'session', sessionId }, assistantStream: true } },
+      {
+        onItem: (v) => {
+          if (!v || typeof v !== 'object') return
+          if (v.type === 'snapshot') {
+            revision = (v.assistantStream && v.assistantStream.revision) || 0
+            if (!settled) { settled = true; resolve(v) }
+            return
+          }
+          if (v.type === 'assistant-stream') {
+            const f = v.frame
+            if (!f) return
+            /* 修订号必须连续，跳号会终止流；这里按协议在跳号时重开。 */
+            if (typeof f.revision === 'number') {
+              if (f.revision !== revision + 1) {
+                if (f.revision > revision) { muxClose(sid); followSession(sessionId).catch(() => {}) }
+                return
+              }
+              revision = f.revision
+            }
+            handleAssistantFrame(sessionId, f)
+            return
+          }
+          if (v.type === 'event') handleSessionEvent(sessionId, v.event, false)
+        },
+        onEnd: () => {
+          mux.follows.delete(sessionId)
+          if (!settled) { settled = true; reject(new Error('会话流已结束')) }
+        },
+        onError: (e) => {
+          mux.follows.delete(sessionId)
+          if (!settled) { settled = true; reject(e) }
+          else toast('会话流出错：' + e.message, 'err')
+        },
+      },
+      true,
+    )
+    mux.follows.set(sessionId, sid)
+  })
+}
+
+/** 把 0.2.x 的 assistant-stream 帧翻译成渲染层认识的 assistant/chunk 事件。 */
+function handleAssistantFrame(sessionId, f) {
+  if (f.type === 'start') { setRunning(true); showThinking(); return }
+  if (f.type === 'chunk') {
+    handleSessionEvent(sessionId, { type: 'assistant/chunk', data: { chunk: f.chunk } }, false)
+    return
+  }
+  if (f.type === 'end') {
+    if (f.outcome && f.outcome.kind === 'abandoned') hideThinking()
   }
 }
 
@@ -1167,11 +1389,12 @@ function handleSessionEvent(sid, event, replay) {
 }
 
 /* ---------- 审批 / 提问 ---------- */
-function handleApproval(rpcId, p) {
+function handleApproval(eventId, p) {
   termLine('审批请求: ' + p.toolName, 't-warn')
   beep(440, 0.1)
+  const answer = (outcome) => answerWaterfall(eventId, { kind: 'result', value: outcome })
   if (state.autoApprove) {
-    rpcRespond(rpcId, { sessionId: p.sessionId, approvalId: p.approvalId, outcome: 'allowed-once' })
+    answer('allowed-once')
       .then(() => termLine('自动批准 ' + p.toolName, 't-dim'))
       .catch(e => toast('自动批准失败: ' + e.message, 'err'))
     return
@@ -1185,15 +1408,16 @@ function handleApproval(rpcId, p) {
   l2.textContent = p.reason || '该操作被权限策略拦截，需要你的许可。'
   body.appendChild(l1); body.appendChild(l2)
   openModal('审批石板', body, [
-    { label: '拒绝', danger: true, onClick: () => rpcRespond(rpcId, { sessionId: p.sessionId, approvalId: p.approvalId, outcome: 'rejected' }).catch(e => toast(e.message, 'err')) },
-    { label: '允许一次', gold: true, onClick: () => rpcRespond(rpcId, { sessionId: p.sessionId, approvalId: p.approvalId, outcome: 'allowed-once' }).catch(e => toast(e.message, 'err')) },
+    { label: '拒绝', danger: true, onClick: () => answer('rejected').catch(e => toast(e.message, 'err')) },
+    { label: '允许一次', gold: true, onClick: () => answer('allowed-once').catch(e => toast(e.message, 'err')) },
   ])
 }
 
-function handleQuestion(rpcId, p) {
+function handleQuestion(eventId, p) {
   beep(520, 0.1)
   const qs = p.questions || []
   const answers = new Map()
+  const answer = (batch) => answerWaterfall(eventId, { kind: 'result', value: batch })
   const body = document.createElement('div')
   for (const q of qs) {
     const wrap = document.createElement('div')
@@ -1247,7 +1471,7 @@ function handleQuestion(rpcId, p) {
     body.appendChild(wrap)
   }
   openModal(state.npcName + '的提问', body, [
-    { label: '取消', danger: true, onClick: () => rpcRespond(rpcId, { sessionId: p.sessionId, answer: { answers: qs.map(q => ({ id: q.id, selected: [], custom: '取消' })) } }).catch(e => toast(e.message, 'err')) },
+    { label: '取消', danger: true, onClick: () => answer({ answers: qs.map(q => ({ id: q.id, selected: [], custom: '取消' })) }).catch(e => toast(e.message, 'err')) },
     {
       label: '回答', gold: true, onClick: () => {
         const arr = qs.map(q => {
@@ -1255,7 +1479,7 @@ function handleQuestion(rpcId, p) {
           const cus = answers.get(q.id + ':custom') || ''
           return { id: q.id, selected: sel, ...(cus ? { custom: cus } : {}) }
         })
-        rpcRespond(rpcId, { sessionId: p.sessionId, answer: { answers: arr } }).catch(e => toast(e.message, 'err'))
+        answer({ answers: arr }).catch(e => toast(e.message, 'err'))
       }
     },
   ])
@@ -2594,6 +2818,8 @@ async function newSession(opts = {}) {
     state.workspaceTitle = opts.title || null
     state.historyLoaded = true
     enterMain()
+    /* 0.2.x 的会话事件只从 session/follow 流到达，新会话同样要订阅。 */
+    followSession(state.sessionId).catch(e => toast('订阅会话失败: ' + e.message, 'err'))
     refreshKeyStatus().then(ok => {
       if (!ok) {
         appendSysLine('尚未配置 API 密钥：点击右上「设置」保存密钥后即可对话。')
@@ -2665,21 +2891,27 @@ function enterMain() {
 
 async function loadHistory() {
   if (!state.sessionId) return
+  const sid = state.sessionId
   try {
-    const v = await rpc('session.history', { sessionId: state.sessionId })
+    const snap = await followSession(sid)
+    if (sid !== state.sessionId) return
     state.historyLoaded = true
     $('#messages').innerHTML = ''
     state.toolBlocks.clear()
     state.streamEl = null
     state.streamWrap = null
     let lastTodos = null
-    for (const entry of v.events || []) {
-      const ev = entry.event
-      if (ev.type === 'todo/write') lastTodos = ev.data.todos
+    for (const record of snap.records || []) {
+      const ev = record && record.event
+      if (!ev) continue
+      if (ev.type === 'todo/write') lastTodos = ev.data && ev.data.todos
       if (ev.type === 'assistant/chunk') continue
-      handleSessionEvent(state.sessionId, ev, true)
+      handleSessionEvent(sid, ev, true)
     }
     if (lastTodos) renderTodos(lastTodos)
+    if (snap.projections && snap.projections.values && snap.projections.values.todos) {
+      renderTodos(snap.projections.values.todos)
+    }
     appendSysLine('—— 历史已加载 ——')
   } catch (e) {
     toast('加载历史失败: ' + e.message, 'err')

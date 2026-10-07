@@ -17,6 +17,7 @@
       name: dsh-theme-terraria
       inject: [webStartup]
       config:
+        openBrowser: !!js ctx.webStartup.openBrowser
         printUrl: true
         surfaceContext: true
         trustedHosts: !!js ctx.webStartup.trustedHosts
