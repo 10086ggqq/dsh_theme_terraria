@@ -129,6 +129,42 @@ body {
 }
 .menu-item:hover, .menu-item.kb-hover { color: var(--gold); filter: brightness(1.2); }
 .title-foot { font-size: 12px; color: var(--stone); text-shadow: 1px 1px 0 var(--black); }
+#back-official-link { cursor: pointer; color: var(--topaz); text-decoration: underline; }
+#back-official-link:hover { color: var(--gold); }
+
+/* ---------- 桌面应用窗口（Electron）集成 ----------
+   宿主 preload 会读这几个令牌：用 --dsw-specific-sidebar-fill / --dsw-alias-label-primary
+   给原生标题栏（窗口控制按钮那一条）配色，并用其余几个令牌渲染原生「应用 / 编辑」菜单。
+   浏览器里没有任何读取方，纯属冗余但无害，所以不加任何条件判断。 */
+:root {
+  --dsw-font-family: 'FusionPixel', 'Microsoft YaHei', sans-serif;
+  --dsw-specific-sidebar-fill: var(--slate-dark);
+  --dsw-alias-label-primary: var(--parchment);
+  --dsw-alias-label-secondary: var(--topaz);
+  --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.14);
+  --dsw-alias-state-business-primary: var(--gold);
+}
+/* 桌面壳隐藏了原生标题栏，网页自己提供拖拽区：顶栏与标题屏空白可拖动，
+   所有可交互元素必须显式 no-drag，否则点不动（app-region 是命中测试，不是层级）。
+   注意不要用整条 fixed 拖拽带盖住顶栏——那会把顶栏上的按钮全部吞掉。 */
+html[data-terraria-desktop] .main-top,
+html[data-terraria-desktop] #screen-title { -webkit-app-region: drag; }
+html[data-terraria-desktop] .main-top button,
+html[data-terraria-desktop] .main-top img,
+html[data-terraria-desktop] #screen-title button,
+html[data-terraria-desktop] #screen-title img,
+html[data-terraria-desktop] #screen-title .conn-dot,
+html[data-terraria-desktop] #back-official-link { -webkit-app-region: no-drag; }
+/* 窗口控制按钮（最小化 / 最大化 / 关闭）画在窗口右上角，压在网页之上。
+   顶栏右侧因此留出这段宽度，让「对话 / 终端 / 音效 / 音乐 / 设置」整体左移，
+   而不是把整个界面往下压。宽度由脚本按 titlebar-area 实测写入，缺省按 138px 兜底。 */
+html[data-terraria-desktop] .main-top {
+  padding-right: calc(12px + var(--terraria-caption-inset, 138px));
+}
+/* 让出宽度后标题更容易挤到按钮：过长时截断，别把按钮推出面板。 */
+html[data-terraria-desktop] .main-top .main-title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .conn-dot { display: inline-block; width: 10px; height: 10px; border: 1px solid var(--black); background: #666; margin-right: 6px; vertical-align: middle; }
 .conn-dot.on { background: var(--emerald); }
 .conn-dot.off { background: #e0115f; }
@@ -143,14 +179,8 @@ body {
   padding: 8px 12px;
 }
 .main-title { font-size: 18px; color: #fff; text-shadow: 2px 2px 0 var(--black); letter-spacing: 2px; }
-.mode-badge {
-  font-size: 12px;
-  padding: 2px 10px;
-  border: 2px solid var(--black);
-  background: var(--slate-mid);
-  color: var(--emerald);
-  text-shadow: 1px 1px 0 var(--black);
-}
+/* 顶栏曾经有个模型徽章（.mode-badge）：HUD「当前模型」已经在显示同一件事，已删除，
+   顶栏只留会话名，右侧全是操作按钮。 */
 .top-spacer { flex: 1; }
 .main-body { flex: 1; min-height: 0; display: flex; gap: 10px; }
 .chat-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -213,13 +243,25 @@ body {
 }
 .msg-reasoning summary { font-size: 12px; color: #9a9aba; cursor: pointer; user-select: none; }
 .msg-reasoning .r-body { font-size: 13px; color: #8a8aaa; white-space: pre-wrap; word-break: break-word; line-height: 1.5; margin-top: 4px; max-height: 200px; overflow-y: auto; }
-.msg-usage { margin-top: 6px; font-size: 11px; color: #7a7a9a; text-align: right; }
+/* 思考过程：一行小字（不占对话块），点一下才展开原文 */
+.reason-line { align-self: flex-start; max-width: 94%; margin: 1px 0 3px 4px; }
+.reason-line .r-head {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 2px;
+  font-size: 11px; line-height: 16px; color: #8585a8; background: none; border: 0;
+  cursor: pointer; user-select: none; text-align: left;
+}
+.reason-line .r-head:hover { color: #b9b9d8; }
+.reason-line .r-caret { font-size: 9px; opacity: 0.8; }
+.reason-line .r-text { font-size: 11.5px; line-height: 1.45; color: #7d7d9d; white-space: pre-wrap; word-break: break-word; margin: 2px 0 4px 3px; max-height: 180px; overflow-y: auto; user-select: text; }
+/* 每条回复底下那行 tokens 统计已去掉：用量只在 HUD 的速率面板里看（.msg-usage 不再使用） */
 .sys-line { align-self: center; font-size: 12px; color: var(--amber); text-shadow: 1px 1px 0 var(--black); padding: 2px 8px; text-align: center; }
 .sys-line.err { color: #ff6a6a; }
-.thinking-row { align-self: flex-start; display: flex; gap: 6px; padding: 10px 14px; }
-.thinking-row .tdot { width: 8px; height: 8px; background: var(--parchment); border: 1px solid var(--black); animation: tblink 0.9s step-end infinite; }
+/* 运行中的等待指示：同样只占一行小字，不再是一块对话区 */
+.thinking-row { align-self: flex-start; display: flex; align-items: center; gap: 5px; padding: 0 0 0 4px; margin: 1px 0 3px; font-size: 11px; line-height: 16px; color: #8585a8; }
+.thinking-row .tdot { width: 5px; height: 5px; background: currentColor; border: 0; animation: tblink 0.9s step-end infinite; }
 .thinking-row .tdot:nth-child(2) { animation-delay: 0.3s; }
 .thinking-row .tdot:nth-child(3) { animation-delay: 0.6s; }
+.thinking-row .tlabel { margin-left: 2px; }
 @keyframes tblink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.15; } }
 
 /* 工具块 */
@@ -358,6 +400,47 @@ body {
 .dlg-btn.dlg-send { color: var(--gold); }
 .dlg-btn.dlg-stop { color: #ff8888; }
 
+/* ---------- 草稿附件栏 / 消息里的附件 ---------- */
+.attach-rail {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+  padding: 6px 0 2px;
+}
+.attach-rail[hidden] { display: none; }
+.attach-item {
+  position: relative; flex: none;
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px;
+  height: 56px; max-width: 200px;
+  padding: 0 8px;
+  background: var(--slate-dark);
+  border: 2px solid var(--black);
+  box-shadow: inset 1px 1px var(--slate-hi);
+  overflow: hidden;
+}
+.attach-item.a-image { width: 56px; padding: 0; justify-content: center; }
+.attach-item img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.attach-item .a-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.attach-item .a-name {
+  font-size: 13px; color: var(--parchment); text-shadow: 1px 1px 0 var(--black);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
+}
+.attach-item .a-meta { font-size: 11px; color: var(--stone); text-shadow: 1px 1px 0 var(--black); }
+.attach-item.a-uploading .a-meta, .attach-item.a-reading .a-meta { color: var(--amber); }
+.attach-item.a-error { border-color: #ff6a6a; }
+.attach-item.a-error .a-meta { color: #ff6a6a; }
+.attach-del {
+  position: absolute; top: 2px; right: 2px;
+  width: 18px; height: 18px; padding: 0; line-height: 1;
+  background: var(--slate-mid); border: 2px solid var(--black);
+  color: var(--parchment); font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.attach-del:hover { color: #ff8888; }
+.input-area.drag-over { outline: 3px dashed var(--gold); outline-offset: -4px; }
+.msg-attach-rail { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.msg-attach-rail .attach-item { height: 40px; max-width: 180px; }
+.msg-attach-rail .attach-item.a-image { width: 40px; }
+.msg-attach-rail .attach-item .a-name { font-size: 12px; max-width: 130px; }
+
 /* ---------- 右侧 HUD ---------- */
 .hud-col { width: 230px; flex: none; display: flex; flex-direction: column; gap: 10px; }
 .hud-panel { padding: 10px 12px; }
@@ -445,10 +528,122 @@ body {
 .list-row .r-meta { font-size: 12px; color: var(--stone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-row.r-active { border-color: var(--gold); }
 .list-row.r-sub { margin-left: 18px; }
+.list-row .r-act { flex: none; }
+/* 桌面壳里 app-region 是「命中测试」而不是层级：标题屏那条整屏 drag 区会把画在它上面的
+   浮层点击全部吃掉（弹窗里的「关闭」点了没反应）。所以浮层必须显式 no-drag（连子元素一起写死，
+   不依赖继承语义）；另外弹窗打开期间干脆把底下的拖拽区撤掉（此时窗口不需要拖动），双保险。 */
+html[data-terraria-desktop] #modal-root,
+html[data-terraria-desktop] #modal-root * { -webkit-app-region: no-drag; }
+html[data-terraria-desktop][data-terraria-modal] .main-top,
+html[data-terraria-desktop][data-terraria-modal] #screen-title { -webkit-app-region: no-drag; }
+/* ---------- 「继续会话」：工作空间为父、第 x 个对话为子的文件夹树 ---------- */
+.tree-tip { font-size: 12px; color: var(--stone); line-height: 1.6; }
+.tree-group, .tree-kids { display: flex; flex-direction: column; gap: 6px; }
+.tree-kids { margin-top: 6px; }
+.tree-kids[hidden] { display: none; }
+.list-row.ws-folder { background: var(--slate-dark); border-color: var(--torch); }
+.list-row.ws-folder .r-name { color: var(--gold); }
+.f-caret { flex: none; width: 14px; color: var(--torch); font-size: 12px; }
+.list-row.r-arch { opacity: 0.72; }
+/* ---------- 消息区：锚点导航 ---------- */
+.msg-area { position: relative; flex: 1; min-height: 0; display: flex; }
+.msg-area .messages { flex: 1; }
+.nav-toggle {
+  position: absolute; top: 10px; right: 18px; z-index: 22;
+  font-family: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
+  background: var(--panel-btn); color: var(--parchment);
+  border: 2px solid var(--black); box-shadow: inset 1px 1px #4a5a7a, inset -1px -1px #101828;
+  text-shadow: 1px 1px 0 var(--black);
+}
+.nav-toggle:hover { filter: brightness(1.15); color: #fff; }
+.nav-panel {
+  position: absolute; top: 44px; right: 18px; bottom: 10px; width: 248px; z-index: 21;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  background: rgba(20, 22, 40, 0.95); border: 3px solid var(--black);
+  box-shadow: inset 2px 2px var(--slate-hi), inset -2px -2px #0a0a16;
+}
+.nav-panel[hidden] { display: none; }
+.nav-head { display: flex; align-items: center; gap: 6px; }
+.nav-title { font-size: 12px; color: var(--gold); letter-spacing: 1px; text-shadow: 1px 1px 0 var(--black); flex: 1; }
+.nav-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.nav-item {
+  border: 2px solid var(--black); background: var(--slate-mid); padding: 4px 6px;
+  cursor: pointer; font-size: 12px; color: var(--parchment); line-height: 1.4;
+}
+.nav-item:hover { filter: brightness(1.15); }
+.nav-item.nav-cur { border-color: var(--gold); }
+.nav-item .nv-who { color: var(--topaz); margin-right: 4px; }
+.nav-item.nav-bot .nv-who { color: var(--emerald); }
+.nav-item .nv-text { color: var(--parchment); opacity: 0.85; }
+.nav-empty { font-size: 12px; color: var(--stone); }
+.nav-more {
+  border: 2px solid var(--black); background: var(--slate-dark); color: var(--torch);
+  font-family: inherit; font-size: 12px; padding: 4px 6px; cursor: pointer;
+}
+.nav-more:hover { filter: brightness(1.2); }
+/* 跳转高亮：被点中的消息闪一下金边 */
+.msg-flash .msg-bubble { animation: msgFlash 1.2s ease-out 1; }
+@keyframes msgFlash {
+  0%, 100% { box-shadow: none; }
+  30% { box-shadow: 0 0 0 3px var(--gold); }
+}
+/* ---------- 输出速率（向导提示面板） ---------- */
+.tok-rate { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.tr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+.tr-k { color: var(--stone); flex: none; }
+.tr-v { color: var(--emerald); font-weight: bold; }
+.tr-spark { display: flex; align-items: flex-end; gap: 2px; height: 26px; margin: 2px 0; }
+.tr-spark i { flex: 1; background: var(--topaz); min-height: 2px; }
+.tr-spark i.tr-last { background: var(--gold); }
+/* ---------- 助手回复的 Markdown ---------- */
+.msg-text.md { white-space: normal; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md p { margin: 8px 0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  margin: 12px 0 6px; color: var(--gold); line-height: 1.4;
+  text-shadow: 1px 1px 0 var(--black);
+}
+.md h1 { font-size: 20px; } .md h2 { font-size: 18px; } .md h3 { font-size: 16px; }
+.md h4, .md h5, .md h6 { font-size: 15px; }
+.md ul, .md ol { margin: 8px 0 8px 22px; }
+.md li { margin: 3px 0; }
+.md blockquote {
+  margin: 8px 0; padding: 4px 10px; border-left: 4px solid var(--torch);
+  background: rgba(0, 0, 0, 0.25); color: var(--topaz);
+}
+.md hr { border: 0; border-top: 2px dashed var(--slate-hi); margin: 12px 0; }
+.md code {
+  font-family: Consolas, monospace; font-size: 0.92em;
+  background: rgba(0, 0, 0, 0.4); color: var(--amber);
+  border: 1px solid rgba(255, 255, 255, 0.12); padding: 0 4px;
+}
+.md .md-pre {
+  position: relative; margin: 10px 0; padding: 10px 12px;
+  background: #0d0f1c; border: 2px solid var(--black);
+  box-shadow: inset 1px 1px #2a2a4a;
+  overflow-x: auto;
+}
+.md .md-pre code { background: none; border: 0; padding: 0; color: #b8d8b8; white-space: pre; }
+.md .md-pre .md-copy {
+  position: absolute; top: 4px; right: 4px; font-family: inherit; font-size: 11px;
+  padding: 1px 6px; cursor: pointer; color: var(--parchment);
+  background: var(--panel-btn); border: 2px solid var(--black);
+}
+.md .md-pre .md-copy:hover { filter: brightness(1.2); }
+.md table { border-collapse: collapse; margin: 10px 0; font-size: 0.94em; }
+.md th, .md td { border: 2px solid var(--black); padding: 4px 8px; text-align: left; }
+.md th { background: var(--slate-dark); color: var(--gold); }
+.md a { color: var(--torch); text-decoration: underline; word-break: break-all; }
+.md img { max-width: 100%; image-rendering: pixelated; }
+.md .md-task { list-style: none; margin-left: -14px; }
 .kv-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
 .kv-row .k { color: var(--stone); flex: none; }
 .kv-row .k.k-title { color: var(--torch); text-shadow: 1px 1px 0 var(--black); }
 .kv-row .v { color: var(--parchment); word-break: break-all; text-align: right; }
+/* 登录角色行右侧：角色文案与「退出登录」按钮同一排，按钮只挂在设置里（对话页 HUD 不放） */
+.kv-row .kv-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.kv-row .kv-actions .pixel-btn[hidden] { display: none; }
 /* 设置弹窗密钥行：输入框居左（起点位置与高度不变，宽度自适应让出按钮位），「保存密钥」「工具审批」依次在其右侧，三者底边对齐 */
 .set-actions { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 .set-actions .pixel-input { flex: 1; min-width: 120px; }
@@ -618,10 +813,11 @@ body {
   <nav class="title-menu">
     <button class="menu-item" data-action="new">新的会话</button>
     <button class="menu-item" data-action="continue">继续会话</button>
+    <button class="menu-item" data-action="plugins">插件管理</button>
     <button class="menu-item" data-action="settings">设置</button>
     <button class="menu-item" data-action="deskpet">人物桌宠</button>
   </nav>
-  <div class="title-foot"><span class="conn-dot" id="conn-dot"></span><span id="conn-label">连接中…</span></div>
+  <div class="title-foot"><span class="conn-dot" id="conn-dot"></span><span id="conn-label">连接中…</span><span id="back-official" hidden> · <span id="back-official-link">切回官方界面</span></span></div>
 </section>
 
 <!-- ============ 主屏 ============ -->
@@ -629,17 +825,29 @@ body {
   <header class="main-top pixel-panel">
     <button class="pixel-btn btn-sm" id="btn-to-title">&lt; 返回</button>
     <div class="main-title" id="main-session-name">向导</div>
-    <div class="mode-badge" id="mode-badge">…</div>
     <div class="top-spacer"></div>
     <button class="pixel-btn btn-sm" id="btn-tab-chat">对话</button>
     <button class="pixel-btn btn-sm" id="btn-tab-term">终端</button>
     <button class="pixel-btn btn-sm" id="btn-sound">音效:开</button>
     <button class="pixel-btn btn-sm" id="btn-bgm">音乐:关</button>
+    <button class="pixel-btn btn-sm" id="btn-plugins">插件管理</button>
     <button class="pixel-btn btn-sm" id="btn-settings2">设置</button>
   </header>
   <div class="main-body">
     <div class="chat-col tab-mpane" id="mpane-chat">
-      <div class="messages pixel-panel" id="messages"></div>
+      <div class="msg-area">
+        <div class="messages pixel-panel" id="messages"></div>
+        <button class="nav-toggle" id="btn-nav" title="聊天记录导航：按锚点跳到任意一条消息">≡ 导航</button>
+        <nav class="nav-panel" id="msg-nav" hidden>
+          <div class="nav-head">
+            <span class="nav-title">聊天记录</span>
+            <button class="nav-more" id="nav-top" title="跳到最早">⬆</button>
+            <button class="nav-more" id="nav-bottom" title="跳到最新">⬇</button>
+          </div>
+          <input class="pixel-input" id="nav-filter" placeholder="筛选已加载的消息…" style="font-size:12px;padding:3px 6px" />
+          <div class="nav-list" id="nav-list"></div>
+        </nav>
+      </div>
       <div class="input-area">
         <div class="dlg-heart"></div>
         <div class="dlg-npc">
@@ -647,8 +855,10 @@ body {
           <div class="dlg-npc-name" id="npc-name">向导</div>
         </div>
         <div class="dlg-main">
-          <textarea class="dlg-input" id="chat-input" placeholder="向你的向导下达指令…（Enter 发送 / Shift+Enter 换行）"></textarea>
+          <div class="attach-rail" id="attach-rail" hidden></div>
+          <textarea class="dlg-input" id="chat-input" placeholder="向你的向导下达指令…（Enter 发送 / Shift+Enter 换行 / Ctrl+V 粘贴截图 / 拖入文件）"></textarea>
           <div class="dlg-btnrow dlg-last">
+            <button class="dlg-btn" id="btn-attach">附件</button>
             <button class="dlg-btn" id="btn-preset">模式选择</button>
             <button class="dlg-btn" id="btn-workspace">工作空间</button>
             <button class="dlg-btn" id="btn-perm">权限设置</button>
@@ -656,6 +866,7 @@ body {
             <button class="dlg-btn dlg-stop" id="btn-cancel">停止</button>
             <button class="dlg-btn dlg-send" id="btn-send">发送</button>
           </div>
+          <input type="file" id="attach-input" multiple hidden />
         </div>
       </div>
     </div>
@@ -676,6 +887,12 @@ body {
       <div class="hud-panel pixel-panel">
         <div class="hud-title">向导提示</div>
         <div class="hud-tip">危险操作会弹出审批石板；红心是对话的印记，金币是账单。</div>
+        <div class="tok-rate">
+          <div class="tr-line"><span class="tr-k">输出速率</span><span class="tr-v" id="tr-live">—</span></div>
+          <div class="tr-spark" id="tr-spark"></div>
+          <div class="tr-line"><span class="tr-k">本回合</span><span class="tr-v" id="tr-turn">—</span></div>
+          <div class="tr-line"><span class="tr-k">会话均值</span><span class="tr-v" id="tr-avg">—</span></div>
+        </div>
       </div>
     </aside>
   </div>
@@ -736,8 +953,28 @@ const state = {
   streamEl: null,     // 流式输出中的助手气泡 body
   streamWrap: null,
   pendingUserText: null,
+  pendingAttachmentsOnly: false,
+  attachments: [],    // 草稿附件（图片走内联 base64，文件走 uploadFileBinary 的 receiptId）
   toolBlocks: new Map(),
   historyLoaded: false,
+  // 历史：follow 只给一窗，更早的靠 session/page 往前翻（否则继续会话时看不到自己早先的提问）
+  historyRecords: [],
+  historyCursor: null,
+  historyOldest: null,
+  historyHasMore: false,
+  suppressScroll: false,
+  // 聊天记录导航（锚点）
+  anchors: [],
+  anchorSeq: 0,
+  navOpen: false,
+  navCurrent: null,
+  navTimer: null,
+  // 输出速率（token/s）
+  rate: { turnStartMs: 0, turnTokens: 0, stepStartMs: 0, stepEstTokens: 0, lastStepTokens: 0, samples: [], sessionTokens: 0, sessionMs: 0 },
+  streamPaintedAt: 0,
+  streamPaintTimer: null,
+  navScrollTimer: null,
+  pluginLog: null,   // 插件安装日志的写入器（弹窗开启时才有）
 }
 // 背景音乐音量：localStorage 存 0~1 小数；缺失或非法时回 0.5（'0' 是合法值，需区别于 null）。
 const rawBgmVol = localStorage.getItem('terraria.bgmVol')
@@ -776,6 +1013,11 @@ const ENDPOINTS = {
   'credentials.describe': { method: 'credentials/describe', args: a => ({ refs: a.refs }) },
   'credentials.set': { method: 'credentials/set', args: a => ({ ref: a.ref, value: a.value }) },
 
+  /* 登录角色（宿主 deepseekAccount 服务）：退出登录删掉本机账号凭据，
+     在后台向 Platform 吊销授权；API 密钥不受影响。 */
+  'account.signOut': { method: 'account/signOut', args: a => ({ client: a.client }) },
+  'account.hasRunningAccountTasks': { method: 'account/hasRunningAccountTasks', args: () => ({}) },
+
   'agentPreset.list': { method: 'agentPresets/list', args: () => ({}) },
   'agentPreset.read': { method: 'agentPresets/read', args: a => ({ agentPreset: a.agentPreset }) },
   'agentPreset.select': { method: 'agentPresets/select', args: a => ({ agentId: a.sessionId, agentPreset: a.agentPreset }) },
@@ -787,8 +1029,24 @@ const ENDPOINTS = {
   'session.models': { method: 'session/modelCatalog', args: () => ({}), value: adaptModelCatalog },
   'session.selectModel': { method: 'session/selectModel', args: a => ({ request: { sessionId: a.sessionId, provider: a.provider, model: a.model, ...(a.reasoningEffort ? { reasoningEffort: a.reasoningEffort } : {}) } }) },
   'session.rename': { method: 'session/rename', args: a => ({ request: { sessionId: a.sessionId, title: a.title } }) },
+  /* 历史翻页：throughSeq 含、beforeSeq 不含；follow 的 snapshot 只给一窗，更早的靠它补。 */
+  'session.page': { method: 'session/page', args: a => ({ request: { address: { kind: 'session', sessionId: a.sessionId }, throughSeq: a.throughSeq, ...(a.beforeSeq === undefined ? {} : { beforeSeq: a.beforeSeq }), ...(a.maxMessages === undefined ? {} : { maxMessages: a.maxMessages }) } }) },
+
+  /* 插件管理（宿主的 pluginManager 服务）：搜索安装、启停与卸载 bundle。 */
+  'pluginManager.listBundles': { method: 'pluginManager/listBundles', args: () => ({}) },
+  'pluginManager.listPlugins': { method: 'pluginManager/listPlugins', args: () => ({}) },
+  'pluginManager.registries': { method: 'pluginManager/registries', args: () => ({}) },
+  'pluginManager.inspect': { method: 'pluginManager/inspect', args: a => ({ spec: a.spec, ...(a.registry ? { options: { registry: a.registry } } : {}) }) },
+  'pluginManager.installBundle': { method: 'pluginManager/installBundle', args: a => ({ spec: a.spec, options: { enabled: a.enabled !== false, requestId: a.requestId || crypto.randomUUID(), ...(a.registry ? { registry: a.registry } : {}), ...(Array.isArray(a.approvedBuilds) && a.approvedBuilds.length > 0 ? { approvedBuilds: a.approvedBuilds } : {}) } }) },
+  'pluginManager.removeBundle': { method: 'pluginManager/removeBundle', args: a => ({ name: a.name }) },
+  'pluginManager.setBundleEnabled': { method: 'pluginManager/setBundleEnabled', args: a => ({ name: a.name, enabled: a.enabled }) },
+  'pluginManager.waitForInstall': { method: 'pluginManager/waitForInstall', args: a => ({ requestId: a.requestId }) },
+  'pluginRegistryProbe.fastest': { method: 'pluginRegistryProbe/fastest', args: () => ({}) },
 
   'workspace.create': { method: 'workspace/create', args: a => ({ request: { path: a.path } }) },
+  /* 归档 / 取消归档：宿主把归档会话 id 放进 workspace/follow 的 archivedSessionIds。 */
+  'workspace.archiveSession': { method: 'workspace/archiveSession', args: a => ({ request: a.stopActivity ? { sessionId: a.sessionId, stopActivity: true } : { sessionId: a.sessionId } }) },
+  'workspace.unarchiveSession': { method: 'workspace/unarchiveSession', args: a => ({ request: { sessionId: a.sessionId } }) },
 
   'llm.providers': { method: 'llm/listProviders', args: () => ({}), value: v => ({ providers: (Array.isArray(v) ? v : []).map(p => ({ provider: p.id, name: p.name })) }) },
   'llm.discoverModels': { method: 'llm/discoverModels', args: a => ({ settingsNs: a.settingsNs || CUSTOM_PROVIDER_NS, request: a.request || {} }) },
@@ -902,10 +1160,19 @@ function termLine(text, cls) {
 }
 
 /* ---------- 弹窗 ---------- */
-function openModal(title, bodyEl, actions) {
+/** 当前弹窗的收尾回调：无论从「关闭」按钮、点背景还是 Esc 退出都要跑一次（如解绑预览监听）。 */
+let modalOnClose = null
+
+/**
+ * 打开弹窗。`actions` 里每项 `{label, onClick, keep, gold, danger}`；`onClose` 在弹窗关闭时调用一次。
+ * 打开期间给 <html> 挂 `data-terraria-modal`：桌面壳据此撤掉标题屏的整屏拖拽区，
+ * 否则那条 drag 区会把浮层上的点击全部吃掉（「关闭」点了没反应）。
+ */
+function openModal(title, bodyEl, actions, onClose) {
   const root = $('#modal-root')
   root.innerHTML = ''
   root.className = ''
+  modalOnClose = typeof onClose === 'function' ? onClose : null
   const box = document.createElement('div')
   box.className = 'modal-box'
   const h = document.createElement('div')
@@ -929,8 +1196,20 @@ function openModal(title, bodyEl, actions) {
   }
   root.appendChild(box)
   root.hidden = false
+  document.documentElement.setAttribute('data-terraria-modal', '')
+  writeShellDiagnostics()
 }
-function closeModal() { const root = $('#modal-root'); root.hidden = true; root.innerHTML = ''; root.className = '' }
+function closeModal() {
+  const root = $('#modal-root')
+  root.hidden = true
+  root.innerHTML = ''
+  root.className = ''
+  document.documentElement.removeAttribute('data-terraria-modal')
+  const done = modalOnClose
+  modalOnClose = null
+  if (done) { try { done() } catch { /* 收尾失败不影响关闭 */ } }
+  writeShellDiagnostics()
+}
 
 /* ---------- 音效（8-bit 简短 beep，WebAudio） ---------- */
 let audioCtx = null
@@ -955,11 +1234,143 @@ function setConn(on) {
   $('#conn-label').textContent = on ? '已连接到向导世界' : '连接已断开，重连中…'
 }
 
+/* ---------- 宿主地址与桌面壳适配 ---------- */
+/*
+ * 桌面应用窗口的地址是 dsh-app://app/…，页面 origin 不是宿主，`location.host` 直接拿来
+ * 连 WebSocket 会连到 app 上。皮肤注入时会以 ?host=<宿主 origin> 把真实地址传进来
+ * （宿主 dsh-desktop-host 通过 __DSH_TRANSPORT__.streamBaseUrl 提供）；浏览器路径没有该
+ * 参数，就继续用当前地址。HTTP 侧不用改：/api/* 是相对路径，桌面壳会带宿主 cookie 转发。
+ */
+const INJECTED_HOST = (() => {
+  try { return new URLSearchParams(location.search).get('host') || '' } catch { return '' }
+})()
+const HOST_BASE = (INJECTED_HOST || (location.protocol + '//' + location.host)).replace(/\/+$/, '')
+const IS_DESKTOP_SHELL = INJECTED_HOST !== '' || location.protocol === 'dsh-app:'
+
+/**
+ * 窗口控制按钮占用的宽度（CSS px）。
+ *
+ * 桌面壳给主窗口开了 Windows 标题栏叠加层（titleBarOverlay），三个按钮画在右上角、
+ * 压在网页之上。官方 WCO API 能给出标题栏可用区，减去它就得到必须让出的宽度；
+ * 拿不到时按三个按钮各 46 DIP 估算（并跟随显示缩放）。
+ * @returns 需要从顶栏右侧让出的像素数。
+ */
+function captionInset() {
+  let caption = 0
+  const overlay = navigator.windowControlsOverlay
+  if (overlay && overlay.visible === true && typeof overlay.getTitlebarAreaRect === 'function') {
+    try {
+      const rect = overlay.getTitlebarAreaRect()
+      const inset = Math.round(window.innerWidth - rect.width)
+      if (Number.isFinite(inset) && inset > 0) caption = inset
+    } catch { /* 落到下面的估算 */ }
+  }
+  if (caption === 0) caption = Math.round(138 * (window.devicePixelRatio || 1))
+  /* 窗口被拖得比屏幕还宽时，右端（含顶栏按钮）整体落在屏幕外：把这段不可见宽度
+     一并让出来，按钮才会回到屏幕里。screen.availWidth 是当前所在显示器的 CSS 宽度。 */
+  const screen = window.screen
+  const available = screen && Number.isFinite(screen.availWidth) ? screen.availWidth : 0
+  const originX = Number.isFinite(window.screenX) ? Math.max(0, window.screenX) : 0
+  const visible = available > 0 ? Math.max(0, available - originX) : window.innerWidth
+  return caption + Math.max(0, window.innerWidth - visible)
+}
+
+/**
+ * 把界面几何写进 localStorage['terraria.diag']。
+ *
+ * 「窗口控制按钮压住顶栏按钮」这类问题只在桌面壳里出现，而桌面壳跑的是
+ * dsh-app:// 里的页面，外部没有 DevTools 可看；把实测值落盘就能事后核对。
+ * 只写一个键，失败一律忽略。
+ */
+function writeShellDiagnostics() {
+  try {
+    const box = (el) => {
+      if (el === null || el === undefined) return null
+      const r = el.getBoundingClientRect()
+      return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]
+    }
+    const regionOf = (el) => (el === null ? null : getComputedStyle(el).getPropertyValue('-webkit-app-region').trim())
+    const overlay = navigator.windowControlsOverlay
+    const header = document.querySelector('.main-top')
+    const modalRoot = $('#modal-root')
+    const modalBox = document.querySelector('#modal-root .modal-box')
+    const style = getComputedStyle(document.documentElement)
+    let titlebarArea = null
+    if (overlay && overlay.visible === true && typeof overlay.getTitlebarAreaRect === 'function') {
+      try {
+        const r = overlay.getTitlebarAreaRect()
+        titlebarArea = [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]
+      } catch { titlebarArea = null }
+    }
+    localStorage.setItem('terraria.diag', JSON.stringify({
+      at: new Date().toISOString(),
+      inner: [window.innerWidth, window.innerHeight],
+      client: [document.documentElement.clientWidth, document.documentElement.clientHeight],
+      dpr: window.devicePixelRatio,
+      screen: window.screen ? [window.screen.width, window.screen.availWidth, window.screenX] : null,
+      titlebarHeight: style.getPropertyValue('--dsh-windows-titlebar-height').trim(),
+      captionInset: style.getPropertyValue('--terraria-caption-inset').trim(),
+      wcoVisible: overlay ? overlay.visible === true : null,
+      titlebarArea,
+      header: box(header),
+      headerPad: header === null ? null : [getComputedStyle(header).paddingTop, getComputedStyle(header).paddingRight],
+      buttons: ['btn-to-title', 'btn-tab-chat', 'btn-tab-term', 'btn-sound', 'btn-bgm', 'btn-settings2']
+        .map((id) => [id, box(document.getElementById(id))]),
+      /* 桌面壳的 app-region 命中测试：浮层与它底下的拖拽区各自的 app-region 值，
+         用来核对「弹窗按钮点不动」这类问题（浮层必须是 no-drag）。 */
+      desktop: document.documentElement.hasAttribute('data-terraria-desktop'),
+      modalFlag: document.documentElement.hasAttribute('data-terraria-modal'),
+      dragRegions: [['#screen-title', regionOf($('#screen-title'))], ['.main-top', regionOf(header)]],
+      modal: {
+        open: modalRoot !== null && !modalRoot.hidden,
+        title: modalBox === null ? null : (modalBox.querySelector('.modal-title') || {}).textContent || null,
+        box: box(modalBox),
+        appRegion: regionOf(modalRoot),
+        actions: [...document.querySelectorAll('#modal-root .modal-actions .pixel-btn')]
+          .map((b) => [b.textContent, box(b)]),
+      },
+    }))
+  } catch { /* 诊断写不进去不影响界面 */ }
+}
+
+/**
+ * 桌面壳专属适配：给顶栏与标题屏加拖拽区、给窗口控制按钮让出右侧宽度、留一个
+ * 退回官方界面的入口。浏览器里什么都不做，网页端体验保持原样。
+ */
+function setupDesktopShell() {
+  if (!IS_DESKTOP_SHELL) return
+  document.documentElement.setAttribute('data-terraria-desktop', '')
+  /* 让出窗口控制按钮那一条宽度：能实测就实测，窗口尺寸/缩放变化时重算。 */
+  const applyCaptionInset = () => {
+    document.documentElement.style.setProperty('--terraria-caption-inset', captionInset() + 'px')
+    writeShellDiagnostics()
+  }
+  applyCaptionInset()
+  window.addEventListener('resize', applyCaptionInset)
+  /* 字体/图片加载完成后布局可能再变一次，补一次实测。 */
+  setTimeout(applyCaptionInset, 1500)
+  const overlay = navigator.windowControlsOverlay
+  if (overlay && typeof overlay.addEventListener === 'function') {
+    overlay.addEventListener('geometrychange', applyCaptionInset)
+  }
+  const wrap = $('#back-official')
+  const link = $('#back-official-link')
+  if (wrap) wrap.hidden = false
+  const back = () => {
+    /* 记下偏好：注入层看到 terraria.takeover=0 就不再接管，落在官方界面上。 */
+    try { localStorage.setItem('terraria.takeover', '0') } catch { /* 忽略存储失败 */ }
+    location.href = location.protocol + '//' + location.host + '/'
+  }
+  if (link) link.addEventListener('click', back)
+  document.addEventListener('keydown', (ev) => {
+    if (ev.altKey && (ev.key === 'o' || ev.key === 'O')) { ev.preventDefault(); back() }
+  })
+}
+
 /* ---------- 事件通道（/api/remote.mux） ---------- */
 function connectWs() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   let ws
-  try { ws = new WebSocket(proto + '//' + location.host + '/api/remote.mux') } catch { scheduleReconnect(); return }
+  try { ws = new WebSocket(HOST_BASE.replace(/^http/, 'ws') + '/api/remote.mux') } catch { scheduleReconnect(); return }
   mux.ws = ws
   state.ws = ws
   ws.addEventListener('open', () => {
@@ -1043,6 +1454,12 @@ function handleForwardedEmit(event, args) {
     if (sid === state.sessionId && preset) {
       state.agentPreset = typeof preset === 'string' ? preset : preset.id
     }
+    return
+  }
+  /* 插件安装日志：只在这块弹窗开着的时候收集（宿主推的是自由文本数组）。 */
+  if (event === 'plugin-manager/install-log' && typeof state.pluginLog === 'function') {
+    const line = (args || []).map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
+    if (line.trim() !== '') state.pluginLog(line.slice(0, 400))
   }
 }
 
@@ -1120,6 +1537,438 @@ function blocksReasoning(content) {
   if (!Array.isArray(content)) return ''
   return content.filter(b => b && b.type === 'reasoning').map(b => b.text).join('\n')
 }
+/**
+ * 思考过程：一行小字（「已思考 · N 字」），点一下在原位展开原文。
+ *
+ * 说话人、字数都在这一行里，不再像之前那样先占一块 `details` 对话区，
+ * 也不会把正文挤到屏幕下面。
+ * @param {string} reasoning - 思考原文（可能多段，已用换行拼接）。
+ * @returns {HTMLElement} 行元素。
+ */
+function buildReasonLine(reasoning) {
+  const wrap = document.createElement('div')
+  wrap.className = 'reason-line'
+  const head = document.createElement('button')
+  head.type = 'button'
+  head.className = 'r-head'
+  const caret = document.createElement('span')
+  caret.className = 'r-caret'
+  caret.textContent = '▶'
+  const label = document.createElement('span')
+  label.className = 'r-label'
+  label.textContent = '已思考 · ' + reasoning.length + ' 字'
+  head.appendChild(caret); head.appendChild(label)
+  const text = document.createElement('div')
+  text.className = 'r-text'
+  text.textContent = reasoning
+  text.hidden = true
+  head.addEventListener('click', () => {
+    text.hidden = !text.hidden
+    caret.textContent = text.hidden ? '▶' : '▼'
+  })
+  wrap.appendChild(head); wrap.appendChild(text)
+  return wrap
+}
+/** 该消息是否带了图片 / 文件块（持久事件里是引用，不带字节）。 */
+function hasAttachments(content) {
+  return Array.isArray(content) && content.some(b => b && (b.type === 'image' || b.type === 'file'))
+}
+/**
+ * 把持久事件里的附件块翻成渲染用的最小信息。
+ * 事件里只有引用（attachmentId / name 之类），字节要另走读取路由，所以这里只列名字。
+ */
+function historicalAttachments(content) {
+  if (!Array.isArray(content)) return []
+  return content.filter(b => b && (b.type === 'image' || b.type === 'file')).map((b, i) => {
+    const ref = b.attachment || b.file || {}
+    return {
+      id: 'hist-' + String(i),
+      kind: b.type === 'image' ? 'image' : 'file',
+      name: b.name || ref.name || (b.type === 'image' ? '图片' : '文件'),
+      bytes: Number.isFinite(b.bytes) ? b.bytes : (Number.isFinite(ref.bytes) ? ref.bytes : NaN),
+      status: 'ready',
+      error: null,
+      previewUrl: null,
+    }
+  })
+}
+
+/* ---------- Markdown（无依赖、先转义再解析，模型输出的 HTML 不会被执行） ---------- */
+/** HTML 转义：Markdown 渲染的第一步，之后所有替换都作用在安全文本上。 */
+function escapeHtml(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+}
+
+/**
+ * 行内 Markdown：`code`、**粗**、*斜*、~~删除~~、[文字](链接)、![图](地址)、裸链接。
+ * @param {string} text - **已转义**的一行/一段文本。
+ * @returns {string} 行内 HTML。
+ */
+function mdInline(text) {
+  const codes = []
+  let out = text.replace(/`([^`]+)`/g, (m, code) => { codes.push(code); return '\u0000' + (codes.length - 1) + '\u0000' })
+  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, src) => (/^(https?:|data:image\/)/i.test(src) ? `<img src="${src}" alt="${alt}" />` : m))
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) => (/^(https?:|mailto:)/i.test(href) ? `<a href="${href}" target="_blank" rel="noreferrer noopener">${label}</a>` : m))
+  out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>')
+  out = out.replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+  out = out.replace(/(^|[^_\w])_([^_\n]+)_/g, '$1<em>$2</em>')
+  out = out.replace(/~~([^~]+)~~/g, '<del>$1</del>')
+  out = out.replace(/(^|[\s(])(https?:\/\/[^\s<>()]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer noopener">$2</a>')
+  return out.replace(/\u0000(\d+)\u0000/g, (m, i) => '<code>' + (codes[Number(i)] ?? '') + '</code>')
+}
+
+/** 表格分隔行：| --- | :--: | 之类。 */
+function isTableSeparator(line) {
+  return /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(line) && line.includes('-') && line.includes('|')
+}
+
+/**
+ * 把同一次列表块的行按缩进还原成嵌套 <ul>/<ol>（缩进一层 = 嵌套一层）。
+ * @param {{depth: number, html: string, cls: string}[]} items - 列表项。
+ * @param {boolean} ordered - 顶层是有序列表。
+ * @param {number} depth - 当前层。
+ */
+function renderListTree(items, ordered, depth) {
+  const tag = ordered ? 'ol' : 'ul'
+  let html = ''
+  let i = 0
+  while (i < items.length) {
+    const it = items[i]
+    if (it.depth < depth) break
+    i += 1
+    const kids = []
+    while (i < items.length && items[i].depth > depth) { kids.push(items[i]); i += 1 }
+    html += '<li' + it.cls + '>' + it.html + (kids.length > 0 ? renderListTree(kids, ordered, depth + 1) : '') + '</li>'
+  }
+  return '<' + tag + '>' + html + '</' + tag + '>'
+}
+
+/** 拆一行表格：去掉首尾竖线后按 | 切。 */
+function splitTableRow(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
+}
+
+/**
+ * 一个够用的 Markdown → HTML：标题、围栏代码、引用、有序/无序/任务列表、表格、分隔线、
+ * 行内样式与链接。用于渲染助手的回复。
+ * @param {string} src - 原始 Markdown 文本。
+ * @returns {string} HTML 字符串（已全部转义）。
+ */
+function renderMarkdown(src) {
+  const lines = String(src === null || src === undefined ? '' : src).replaceAll('\r\n', '\n').split('\n')
+  const out = []
+  let para = []
+  const flushPara = () => {
+    if (para.length === 0) return
+    out.push('<p>' + para.map(l => mdInline(l)).join('<br>') + '</p>')
+    para = []
+  }
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const fence = /^\s*(`{3,}|~{3,})\s*([\w+#.-]*)\s*$/.exec(line)
+    if (fence !== null) {
+      flushPara()
+      const marker = fence[1][0]
+      const lang = fence[2] || ''
+      const body = []
+      i += 1
+      while (i < lines.length && !new RegExp('^\\s*' + marker + '{3,}\\s*$').test(lines[i])) { body.push(lines[i]); i += 1 }
+      if (i < lines.length) i += 1 // 吃掉收尾围栏；没闭合就当到文末
+      out.push('<pre class="md-pre"><button class="md-copy" type="button">复制</button><code'
+        + (lang ? ' data-lang="' + lang + '"' : '') + '>' + escapeHtml(body.join('\n')) + '</code></pre>')
+      continue
+    }
+    if (/^\s*$/.test(line)) { flushPara(); i += 1; continue }
+    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) { flushPara(); out.push('<hr />'); i += 1; continue }
+    const head = /^(#{1,6})\s+(.*)$/.exec(line)
+    if (head !== null) {
+      flushPara()
+      const level = head[1].length
+      out.push(`<h${level}>` + mdInline(escapeHtml(head[2].trim())) + `</h${level}>`)
+      i += 1
+      continue
+    }
+    if (/^\s*>/.test(line)) {
+      flushPara()
+      const quoted = []
+      while (i < lines.length && /^\s*>/.test(lines[i])) { quoted.push(lines[i].replace(/^\s*>\s?/, '')); i += 1 }
+      out.push('<blockquote>' + quoted.map(l => mdInline(escapeHtml(l))).join('<br>') + '</blockquote>')
+      continue
+    }
+    // 表格：本行含 |，下一行是分隔行
+    if (line.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      flushPara()
+      const headCells = splitTableRow(line)
+      i += 2
+      const rows = []
+      while (i < lines.length && lines[i].includes('|') && !/^\s*$/.test(lines[i])) { rows.push(splitTableRow(lines[i])); i += 1 }
+      out.push('<table><thead><tr>' + headCells.map(c => '<th>' + mdInline(escapeHtml(c)) + '</th>').join('')
+        + '</tr></thead><tbody>' + rows.map(r => '<tr>' + r.map(c => '<td>' + mdInline(escapeHtml(c)) + '</td>').join('') + '</tr>').join('')
+        + '</tbody></table>')
+      continue
+    }
+    const item = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(line)
+    if (item !== null) {
+      flushPara()
+      const ordered = /\d/.test(item[2])
+      const items = []   // {depth, html, cls}
+      while (i < lines.length) {
+        const m = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(lines[i])
+        if (m === null) {
+          // 续行（缩进且不是新条目）并到上一条
+          if (items.length > 0 && /^\s+\S/.test(lines[i])) { items[items.length - 1].html += '<br>' + mdInline(escapeHtml(lines[i].trim())); i += 1; continue }
+          break
+        }
+        const depth = Math.min(2, Math.floor(m[1].replaceAll('\t', '  ').length / 2))
+        let html = mdInline(escapeHtml(m[3]))
+        let cls = ''
+        const task = /^\[([ xX])\]\s*(.*)$/.exec(m[3])
+        if (task !== null) { cls = ' class="md-task"'; html = (task[1] === ' ' ? '☐ ' : '☑ ') + mdInline(escapeHtml(task[2])) }
+        items.push({ depth, html, cls })
+        i += 1
+      }
+      out.push(renderListTree(items, ordered, 0))
+      continue
+    }
+    para.push(escapeHtml(line))
+    i += 1
+  }
+  flushPara()
+  return out.join('\n')
+}
+
+/* ---------- 消息锚点：聊天记录快速导航 ---------- */
+/** 登记一个可跳转的锚点（用户消息与「有正文的」助手回复）。 */
+function registerAnchor(el, kind, text) {
+  state.anchorSeq += 1
+  const id = 'anc-' + state.anchorSeq
+  el.dataset.anchor = id
+  el.dataset.kind = kind
+  state.anchors.push({ id, kind, el, text: text || '' })
+  if (state.navOpen) scheduleNavRebuild()
+  return id
+}
+
+/**
+ * 同步一条助手回复的锚点：**只有正文的回复才算「结果」**，只带思考过程 / tokens 的中间步骤
+ * 不进聊天记录（导航清单里全是可跳的结果，而不是每一步流水）。
+ */
+function syncBotAnchor(wrap, text) {
+  if (wrap === null || wrap === undefined) return
+  const body = String(text || '')
+  const existing = state.anchors.find(a => a.el === wrap)
+  if (existing === undefined) {
+    if (body.trim() !== '') registerAnchor(wrap, 'bot', body)
+    return
+  }
+  existing.text = body
+  if (state.navOpen) scheduleNavRebuild()
+}
+
+/** 锚点/消息变化后延迟重建导航清单（合并连续多次调用）。 */
+function scheduleNavRebuild() {
+  if (state.navTimer) return
+  state.navTimer = setTimeout(() => { state.navTimer = null; rebuildNav() }, 150)
+}
+
+/** 一行预览文本：压掉换行与多余空白，超长截断。 */
+function navPreview(text, max) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim()
+  return flat.length > max ? flat.slice(0, max) + '…' : flat
+}
+
+/** 重建导航清单（按筛选框过滤）。 */
+function rebuildNav() {
+  const list = $('#nav-list')
+  if (list === null) return
+  const filterEl = $('#nav-filter')
+  const filter = filterEl === null ? '' : filterEl.value.trim().toLowerCase()
+  list.innerHTML = ''
+  if (state.historyHasMore) {
+    const more = document.createElement('button')
+    more.className = 'nav-more'
+    more.type = 'button'
+    more.id = 'nav-load-older'
+    more.textContent = '⬆ 加载更早的历史'
+    more.addEventListener('click', () => loadOlderHistory(true))
+    list.appendChild(more)
+  }
+  const items = state.anchors.filter(a => filter === '' || a.text.toLowerCase().includes(filter))
+  if (items.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'nav-empty'
+    empty.textContent = state.anchors.length === 0 ? '（还没有消息）' : '（没有匹配的消息）'
+    list.appendChild(empty)
+    return
+  }
+  for (const a of items) {
+    const row = document.createElement('div')
+    row.className = 'nav-item' + (a.kind === 'bot' ? ' nav-bot' : '') + (a.id === state.navCurrent ? ' nav-cur' : '')
+    row.dataset.target = a.id
+    const who = document.createElement('span')
+    who.className = 'nv-who'
+    who.textContent = a.kind === 'bot' ? state.npcName : '冒险者'
+    const txt = document.createElement('span')
+    txt.className = 'nv-text'
+    txt.textContent = navPreview(a.text, 46)
+    row.appendChild(who); row.appendChild(txt)
+    row.addEventListener('click', () => jumpToAnchor(a.id))
+    list.appendChild(row)
+  }
+}
+
+/** 跳到某个锚点：滚动 + 闪一下 + 高亮导航行。 */
+function jumpToAnchor(id) {
+  const target = state.anchors.find(a => a.id === id)
+  if (target === undefined) return
+  state.navCurrent = id
+  target.el.scrollIntoView({ block: 'start' })
+  target.el.classList.add('msg-flash')
+  setTimeout(() => target.el.classList.remove('msg-flash'), 1400)
+  markNavCurrent()
+}
+
+/** 只更新导航清单里的高亮行，不整体重建。 */
+function markNavCurrent() {
+  const list = $('#nav-list')
+  if (list === null) return
+  for (const row of list.querySelectorAll('.nav-item')) row.classList.toggle('nav-cur', row.dataset.target === state.navCurrent)
+}
+
+/** 滚动时做「当前读到哪」的高亮：取最后一条已经滚到视口顶部的锚点（锚点按 DOM 顺序，二分找）。 */
+function syncNavOnScroll() {
+  if (!state.navOpen || state.anchors.length === 0) return
+  const box = $('#messages')
+  if (box === null) return
+  const limit = box.getBoundingClientRect().top + 24
+  let lo = 0
+  let hi = state.anchors.length - 1
+  let current = null
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (state.anchors[mid].el.getBoundingClientRect().top <= limit) { current = state.anchors[mid].id; lo = mid + 1 }
+    else hi = mid - 1
+  }
+  if (current !== null && current !== state.navCurrent) { state.navCurrent = current; markNavCurrent() }
+}
+
+/** 展开 / 收起导航面板。 */
+function toggleNav(force) {
+  const panel = $('#msg-nav')
+  if (panel === null) return
+  state.navOpen = force === undefined ? !state.navOpen : Boolean(force)
+  panel.hidden = !state.navOpen
+  const btn = $('#btn-nav')
+  if (btn !== null) btn.textContent = state.navOpen ? '× 关闭' : '≡ 导航'
+  if (state.navOpen) rebuildNav()
+}
+
+/* ---------- 输出速率（token/s） ---------- */
+/** 流式文本的粗估 token 数：CJK/全角算 1 个，其余算 1/4 个（只服务实时速率显示）。 */
+function estimateTokens(text) {
+  let tokens = 0
+  for (const ch of String(text || '')) tokens += /[\u2e80-\u9fff\uff00-\uffef\u3000-\u303f]/.test(ch) ? 1 : 0.25
+  return tokens
+}
+
+/** 把一帧速率样本画成迷你条形图（最近 24 个样本，最高的那根撑满）。 */
+function renderSpark() {
+  const box = $('#tr-spark')
+  if (box === null) return
+  const samples = state.rate.samples.slice(-24)
+  box.innerHTML = ''
+  if (samples.length === 0) return
+  const max = Math.max(...samples, 1)
+  samples.forEach((v, i) => {
+    const bar = document.createElement('i')
+    bar.style.height = Math.max(2, Math.round(v / max * 26)) + 'px'
+    if (i === samples.length - 1) bar.className = 'tr-last'
+    bar.title = Math.round(v) + ' tok/s'
+    box.appendChild(bar)
+  })
+}
+
+/** 刷新「向导提示」里的速率显示。 */
+function renderRate() {
+  const live = $('#tr-live')
+  if (live === null) return
+  const r = state.rate
+  if (state.running && r.stepStartMs > 0) {
+    const seconds = Math.max(0.25, (Date.now() - r.stepStartMs) / 1000)
+    const tokens = Math.max(r.stepEstTokens, r.lastStepTokens)
+    live.textContent = Math.round(tokens / seconds) + ' tok/s'
+  } else {
+    live.textContent = r.samples.length > 0 ? Math.round(r.samples[r.samples.length - 1]) + ' tok/s' : '—'
+  }
+  const turn = $('#tr-turn')
+  if (turn !== null) {
+    const seconds = r.turnStartMs > 0 ? Math.round((Date.now() - r.turnStartMs) / 1000) : 0
+    turn.textContent = (r.turnTokens > 0 || seconds > 0) ? fmtTokens(r.turnTokens) + ' tok / ' + seconds + 's' : '—'
+  }
+  const avg = $('#tr-avg')
+  if (avg !== null) {
+    const rate = r.sessionMs > 0 ? r.sessionTokens / (r.sessionMs / 1000) : 0
+    avg.textContent = rate > 0 ? Math.round(rate) + ' tok/s · 共 ' + fmtTokens(r.sessionTokens) : '—'
+  }
+  renderSpark()
+}
+
+/** 千分位 + k/M 的紧凑 token 数量显示。 */
+function fmtTokens(n) {
+  const v = Number(n) || 0
+  if (v < 1000) return String(Math.round(v))
+  if (v < 1000000) return (v / 1000).toFixed(v < 10000 ? 1 : 0) + 'k'
+  return (v / 1000000).toFixed(2) + 'M'
+}
+
+/** 回合/步骤开始：重置即时速率的计时。 */
+function rateTurnStart() {
+  state.rate.turnStartMs = Date.now()
+  state.rate.turnTokens = 0
+  state.rate.stepStartMs = Date.now()
+  state.rate.stepEstTokens = 0
+  state.rate.lastStepTokens = 0
+  renderRate()
+}
+/** 模型步开始：只重置「本步」的计时与估算。 */
+function rateStepStart() {
+  state.rate.stepStartMs = Date.now()
+  state.rate.stepEstTokens = 0
+}
+/** 收到一步的 usage：记入本回合、会话累计，并落一个采样点。 */
+function rateStepDone(usage) {
+  const out = Number(usage && usage.outputTokens)
+  if (!Number.isFinite(out) || out <= 0) return
+  const seconds = state.rate.stepStartMs > 0 ? Math.max(0.2, (Date.now() - state.rate.stepStartMs) / 1000) : 0
+  state.rate.lastStepTokens = out
+  state.rate.turnTokens += out
+  state.rate.sessionTokens += out
+  if (seconds > 0) {
+    state.rate.sessionMs += seconds * 1000
+    state.rate.samples.push(out / seconds)
+    if (state.rate.samples.length > 120) state.rate.samples.shift()
+  }
+  renderRate()
+}
+/** 用会话投影里的历史统计给速率打底（decodeTokens / decodeMs 就是平均解码速率）。 */
+function seedRate(stats) {
+  if (stats === null || stats === undefined) return
+  const tokens = Number(stats.decodeTokens)
+  const ms = Number(stats.decodeMs)
+  if (Number.isFinite(tokens) && Number.isFinite(ms) && tokens > 0 && ms > 0) {
+    state.rate.sessionTokens = tokens
+    state.rate.sessionMs = ms
+  }
+}
+/** 换会话时把速率清零（采样图与回合计数属于当前会话）。 */
+function resetRate() {
+  state.rate = { turnStartMs: 0, turnTokens: 0, stepStartMs: 0, stepEstTokens: 0, lastStepTokens: 0, samples: [], sessionTokens: 0, sessionMs: 0 }
+  renderRate()
+}
 
 /** 复制文本到剪贴板：优先 Clipboard API（安全上下文），退回 execCommand 兼容局域网 HTTP 访问。 */
 function copyText(text) {
@@ -1153,7 +2002,7 @@ function msgCopyBtn(getText) {
   return btn
 }
 
-function appendUserMsg(text, pending) {
+function appendUserMsg(text, pending, attachments) {
   const el = document.createElement('div')
   el.className = 'msg user'
   if (pending) el.setAttribute('data-pending', '1')
@@ -1167,9 +2016,17 @@ function appendUserMsg(text, pending) {
   body.textContent = text
   name.appendChild(msgCopyBtn(() => body.textContent))
   bubble.appendChild(name); bubble.appendChild(body)
+  const list = attachments || []
+  if (list.length > 0) {
+    const rail = document.createElement('div')
+    rail.className = 'msg-attach-rail'
+    for (const item of list) rail.appendChild(attachmentNode(item, null))
+    bubble.appendChild(rail)
+  }
   el.appendChild(bubble)
   $('#messages').appendChild(el)
-  scrollMsgs()
+  registerAnchor(el, 'user', text)
+  if (!state.suppressScroll) scrollMsgs()
   return el
 }
 function removePendingUserMsgs() {
@@ -1187,8 +2044,8 @@ function startAssistantStream() {
   name.className = 'msg-name'
   name.textContent = state.npcName
   const body = document.createElement('div')
-  body.className = 'msg-text'
-  body.textContent = ''
+  body.className = 'msg-text md'
+  body.mdSource = ''
   bubble.appendChild(name); bubble.appendChild(body)
   el.appendChild(bubble)
   $('#messages').appendChild(el)
@@ -1197,39 +2054,74 @@ function startAssistantStream() {
   scrollMsgs()
   return body
 }
-function finalizeAssistant(message, usage) {
-  const text = blocksText(message.content)
-  const reasoning = blocksReasoning(message.content)
-  const body = state.streamEl || startAssistantStream()
-  body.textContent = text
-  // 名牌行补复制按钮（历史回放与实时流共用本函数；stream 中途无按钮，定稿即有）
-  const nameRow = body.parentNode ? body.parentNode.querySelector('.msg-name') : null
-  if (nameRow && !nameRow.querySelector('.msg-copy')) nameRow.appendChild(msgCopyBtn(() => body.textContent))
-  if (reasoning) {
-    const det = document.createElement('details')
-    det.className = 'msg-reasoning'
-    const sum = document.createElement('summary')
-    sum.textContent = '思考过程'
-    const rb = document.createElement('div')
-    rb.className = 'r-body'
-    rb.textContent = reasoning
-    det.appendChild(sum); det.appendChild(rb)
-    body.parentNode.insertBefore(det, body)
+/** 流式渲染 Markdown：合并高频 delta，最多 ~8 次/秒重排。 */
+function streamMarkdown(body, text) {
+  body.mdSource = text
+  const now = Date.now()
+  if (now - (state.streamPaintedAt || 0) < 120) {
+    if (!state.streamPaintTimer) {
+      state.streamPaintTimer = setTimeout(() => {
+        state.streamPaintTimer = null
+        if (state.streamEl) paintStream(state.streamEl)
+      }, 130)
+    }
+    return
   }
-  if (usage && (usage.totalTokens !== undefined)) {
-    const u = document.createElement('div')
-    u.className = 'msg-usage'
-    u.textContent = 'tokens: ' + (usage.promptTokens ?? '?') + ' + ' + (usage.completionTokens ?? '?') + ' = ' + usage.totalTokens
-    body.parentNode.appendChild(u)
-  }
-  state.streamEl = null
-  state.streamWrap = null
+  paintStream(body)
+}
+function paintStream(body) {
+  state.streamPaintedAt = Date.now()
+  body.innerHTML = renderMarkdown(body.mdSource || '')
+  syncBotAnchor(body.closest('.msg'), body.mdSource)
   scrollMsgs()
 }
+/**
+ * 一条助手消息定稿：写正文、补复制按钮、必要时加思考行。
+ *
+ * **没有正文也没有思考的「空步骤」不留气泡**：模型分步时中间那些只调了工具的步骤
+ * 曾经会留一个只剩 token 统计的砖块，聊天流里全是它。用量照旧记进 HUD 的速率面板
+ * （`rateStepDone`），只是不占聊天流。
+ * @param message - assistant/message 事件里的消息体。
+ * @param usage - 该步骤的用量（可能缺失）。
+ * @param replay - 历史回放（不计速率采样）。
+ */
+function finalizeAssistant(message, usage, replay) {
+  const text = blocksText(message.content)
+  const reasoning = blocksReasoning(message.content)
+  /* 用量先记（空步骤也要进 HUD 面板）：面板是本页唯一的 token 统计出口。 */
+  if (!replay && usage && Number.isFinite(Number(usage.outputTokens))) rateStepDone(usage)
+  if (text.trim() === '' && reasoning.trim() === '') {
+    if (state.streamWrap) state.streamWrap.remove()
+    state.streamEl = null
+    state.streamWrap = null
+    state.streamPaintTimer = null
+    state.streamPaintedAt = 0
+    if (state.navOpen) scheduleNavRebuild()
+    return
+  }
+  const body = state.streamEl || startAssistantStream()
+  body.mdSource = text
+  body.innerHTML = renderMarkdown(text)
+  // 名牌行补复制按钮（历史回放与实时流共用本函数；stream 中途无按钮，定稿即有）
+  const nameRow = body.parentNode ? body.parentNode.querySelector('.msg-name') : null
+  if (nameRow && !nameRow.querySelector('.msg-copy')) nameRow.appendChild(msgCopyBtn(() => body.mdSource || body.textContent))
+  syncBotAnchor(body.closest('.msg'), text)
+  if (reasoning) body.parentNode.insertBefore(buildReasonLine(reasoning), body)
+  state.streamEl = null
+  state.streamWrap = null
+  state.streamPaintTimer = null
+  state.streamPaintedAt = 0
+  if (!state.suppressScroll) scrollMsgs()
+  if (state.navOpen) scheduleNavRebuild()
+}
 
-function appendToolBlock(callId, name, args) {
+/**
+ * 一条工具调用块。`collapsed` 为真时默认收起（历史回放用：一条会话动辄上百次调用，
+ * 全展开既吵又慢）。
+ */
+function appendToolBlock(callId, name, args, collapsed) {
   const el = document.createElement('div')
-  el.className = 'tool-block tool-running'
+  el.className = 'tool-block tool-running' + (collapsed ? ' collapsed' : '')
   const head = document.createElement('div')
   head.className = 'tool-head'
   const mark = document.createElement('span')
@@ -1248,7 +2140,7 @@ function appendToolBlock(callId, name, args) {
   el.appendChild(head); el.appendChild(body)
   $('#messages').appendChild(el)
   state.toolBlocks.set(callId, el)
-  scrollMsgs()
+  if (!state.suppressScroll) scrollMsgs()
   termLine('工具调用 ' + name + ' ' + (args || ''), 't-dim')
 }
 function finishToolBlock(callId, resultText, isError) {
@@ -1274,6 +2166,10 @@ function showThinking() {
     d.className = 'tdot'
     el.appendChild(d)
   }
+  const label = document.createElement('span')
+  label.className = 'tlabel'
+  label.textContent = '正在思考…'
+  el.appendChild(label)
   $('#messages').appendChild(el)
   thinkingEl = el
   scrollMsgs()
@@ -1326,12 +2222,13 @@ function handleSessionEvent(sid, event, replay) {
       /* 系统注入的上下文（skills 目录、工作区规则等）source.kind 不是 'user'，
          官方 UI 将其渲染为低权重 context 节点；这里直接跳过，不进入聊天流。 */
       if (d.source && d.source.kind !== 'user') break
-      const text = blocksText(d.content) || '(非文本消息)'
-      if (!replay && state.pendingUserText === text) {
+      const text = blocksText(d.content) || (hasAttachments(d.content) ? '(附件)' : '(非文本消息)')
+      if (!replay && (state.pendingUserText === text || (state.pendingAttachmentsOnly && text === '(附件)'))) {
         removePendingUserMsgs()
         state.pendingUserText = null
+        state.pendingAttachmentsOnly = false
       }
-      appendUserMsg(text, false)
+      appendUserMsg(text, false, historicalAttachments(d.content))
       break
     }
     case 'assistant/chunk': {
@@ -1340,19 +2237,20 @@ function handleSessionEvent(sid, event, replay) {
       if (!c) break
       if (c.type === 'text-delta') {
         const body = startAssistantStream()
-        body.textContent += c.text
-        scrollMsgs()
+        streamMarkdown(body, (body.mdSource || '') + c.text)
+        state.rate.stepEstTokens += estimateTokens(c.text)
+        if (!state.suppressScroll) scrollMsgs()
       } else if (c.type === 'reasoning-delta') {
         showThinking()
       }
       break
     }
     case 'assistant/message':
-      finalizeAssistant(d.message, d.usage)
-      beep(660, 0.06)
+      finalizeAssistant(d.message, d.usage, replay)
+      if (!replay) beep(660, 0.06)
       break
     case 'tool/call':
-      appendToolBlock(d.callId, d.name, d.arguments)
+      appendToolBlock(d.callId, d.name, d.arguments, replay)
       break
     case 'tool/result': {
       const block = Array.isArray(d.message && d.message.content) ? d.message.content[0] : null
@@ -1362,10 +2260,16 @@ function handleSessionEvent(sid, event, replay) {
     }
     case 'turn/start':
       setRunning(true)
+      if (!replay) rateTurnStart()
       showThinking()
+      break
+    case 'step/start':
+      if (!replay) rateStepStart()
       break
     case 'turn/end': {
       setRunning(false)
+      state.rate.stepStartMs = 0
+      renderRate()
       const r = d.reason || {}
       if (r.kind === 'error') {
         const msg = r.error && r.error.message ? r.error.message : '请求失败'
@@ -1377,7 +2281,7 @@ function handleSessionEvent(sid, event, replay) {
       } else if (r.kind === 'max-tokens') {
         appendSysLine('达到单步输出上限')
       }
-      if (state.streamEl && state.streamEl.textContent === '') { state.streamWrap.remove(); state.streamEl = null; state.streamWrap = null }
+      if (state.streamEl && (state.streamEl.mdSource || '') === '') { state.streamWrap.remove(); state.streamEl = null; state.streamWrap = null }
       break
     }
     case 'todo/write':
@@ -1488,26 +2392,190 @@ function handleQuestion(eventId, p) {
 /* ---------- 滚动 ---------- */
 function scrollMsgs() {
   const m = $('#messages')
+  if (state.suppressScroll) return
   m.scrollTop = m.scrollHeight
+}
+
+/* ---------- 登录角色（账号 / API 密钥） ---------- */
+
+/**
+ * 宿主侧的登录快照，形状：
+ * `{status: 'signed-in'|'signed-out'|'unknown', role: 'account'|'api-key'|'unknown',
+ * name?, contact?, avatarUrl?}`。
+ *
+ * 来源是同源的 `GET /terraria/account`（宿主侧主题插件问账号服务，只投影昵称 /
+ * 联系方式 / 头像）。只读的快照走这条不需要鉴权的主题路由；**改变状态的动作**
+ * （退出登录）走 `/api/account/*`——那条路靠应用 URL 签发的浏览器会话 cookie
+ * 鉴权（页面同源请求自带，页面外的裸请求会被 401 挡掉）。
+ */
+let accountState = { status: 'unknown', role: 'unknown' }
+
+/** 读取一次登录状态（宿主没响应就保持上一次的结论）。 */
+async function loadAccount() {
+  try {
+    const res = await fetch('/terraria/account', { cache: 'no-store' })
+    if (res.ok) {
+      const value = await res.json()
+      if (value !== null && typeof value === 'object' && typeof value.role === 'string') accountState = value
+    }
+  } catch {
+    /* 路由不可用：保持 unknown，页面不会因此去催密钥 */
+  }
+  return accountState
+}
+
+/**
+ * 反复读登录状态直到不再「检查中」，或者试完为止。
+ *
+ * 宿主那边的账号查询是异步的：页面第一次请求可能正好碰上它还没算完，所以不能
+ * 拿一次未知就当结论——那会导致登录了账号却仍被当成没配密钥。
+ * @param {number} [tries] - 最多尝试次数。
+ * @returns {Promise<object>} 最后一次拿到的状态。
+ */
+async function loadAccountWithRetry(tries = 5) {
+  await loadAccount()
+  for (let i = 1; i < tries && !accountResolved(); i += 1) {
+    await new Promise(resolve => setTimeout(resolve, 700))
+    await loadAccount()
+  }
+  return accountState
+}
+
+/** 登录角色是否已经确定（unknown 时不要下结论，免得误报「密钥未配置」）。 */
+function accountResolved() {
+  return accountState.role !== 'unknown'
+}
+
+/** 是否是「登录了 DeepSeek 账号」——这种情况下不该再催人填 API 密钥。 */
+function accountSignedIn() {
+  return accountState.role === 'account'
+}
+
+/**
+ * 登录角色的一行文案：账号登录（有人名 / 联系方式就带上），否则按 API 密钥表述。
+ * @returns {{role: string, detail: string}} role 是短标签，detail 是补充说明。
+ */
+function accountRoleText() {
+  if (accountState.role === 'account') {
+    const who = accountState.name || accountState.contact || ''
+    return { role: 'DeepSeek 账号', detail: who === '' ? '已登录（宿主账号凭据）' : '已登录 · ' + who }
+  }
+  if (!accountResolved()) return { role: '检查中…', detail: '正在向宿主查询登录状态' }
+  return { role: 'API 密钥', detail: '未登录 DeepSeek 账号，用密钥直连' }
+}
+
+/**
+ * 账号接口的客户端身份：宿主用它拼 Platform 请求头（版本 / 语言 / 时区），
+ * 三个字段缺一个宿主就会拒绝这次调用。版本号与官方前端打包时写死的那个一致。
+ */
+const ACCOUNT_CLIENT_VERSION = '0.2.0-rc.2'
+
+/**
+ * 构造一次账号调用的客户端身份，调用时才读语言与时区（跟当前环境一致）。
+ * @returns {{version: string, locale: string, timezoneOffsetSeconds: number}} 客户端身份。
+ */
+function accountClient() {
+  return {
+    version: ACCOUNT_CLIENT_VERSION,
+    locale: navigator.language || 'zh-CN',
+    timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
+  }
+}
+
+/**
+ * 退出登录：宿主删掉本机账号凭据并广播 signed-out，页面重新问一次登录角色。
+ *
+ * 「退出登录」按钮只出现在设置弹窗的登录角色一行（见 openSettings / renderRoleRow），
+ * 对话页 HUD 只报角色，不放这个按钮。
+ * @returns {Promise<boolean>} 宿主确认退回未登录时为 true。
+ */
+async function signOutAccount() {
+  try {
+    await rpc('account.signOut', { client: accountClient() })
+  } catch (e) {
+    toast('退出登录失败：' + errText(e), 'err')
+    return false
+  }
+  const state = await loadAccountAfterSignOut()
+  renderRoleRow()
+  refreshKeyStatus()
+  if (accountSignedIn()) {
+    /* 宿主已经删了凭据，这里还显示账号只可能是页面没刷到新值：别谎报成功。 */
+    toast('已发出退出请求，界面稍后刷新', 'ok')
+    return false
+  }
+  toast('已退出登录，' + (state.role === 'api-key' ? '现在使用 API 密钥' : '可以改用 API 密钥'), 'ok')
+  return true
+}
+
+/**
+ * 退出登录后重读登录角色：宿主的状态快照是异步算的（事件驱动 + 最小间隔节流），
+ * 立刻读可能还是旧值，所以轮询几次直到不再是「账号登录」。
+ * @param {number} [tries] - 最多读取次数。
+ * @returns {Promise<object>} 最后一次拿到的快照。
+ */
+async function loadAccountAfterSignOut(tries = 6) {
+  for (let i = 0; i < tries; i += 1) {
+    await loadAccount()
+    if (!accountSignedIn()) return accountState
+    await new Promise(resolve => setTimeout(resolve, 400))
+  }
+  return accountState
 }
 
 /* ---------- 凭据（API 密钥） ---------- */
 async function refreshKeyStatus() {
   const dot = $('#hud-key-dot'), label = $('#hud-key-label')
+  /* 已登录账号：HUD 报登录角色，不再只报「API 密钥未配置」。 */
+  if (accountSignedIn()) {
+    const role = accountRoleText()
+    if (dot) dot.className = 'k-dot ok'
+    if (label) label.textContent = role.role + '：已登录'
+    return true
+  }
   try {
     const v = await rpc('credentials.describe', { refs: [KEY_REF] })
     const c = v.credentials && v.credentials[KEY_REF]
     if (c && c.configured) {
       dot.className = 'k-dot ok'
       label.textContent = 'API 密钥：已配置' + (c.source ? '（' + c.source + '）' : '')
-    } else {
-      dot.className = 'k-dot no'
-      label.textContent = 'API 密钥：未配置'
+      return true
     }
-    return Boolean(c && c.configured)
+    if (!accountResolved()) {
+      dot.className = 'k-dot no'
+      label.textContent = '登录状态与密钥：检查中…'
+      return false
+    }
+    dot.className = 'k-dot no'
+    label.textContent = 'API 密钥：未配置'
+    return false
   } catch (e) {
     dot.className = 'k-dot no'
     label.textContent = 'API 密钥：查询失败'
+    return false
+  }
+}
+
+/**
+ * 是否需要提示「去配置 API 密钥」。
+ *
+ * 三个前提缺一不可：账号侧明确没登录、确实没有可用密钥、状态不是「还没查出来」。
+ * 登录了 DeepSeek 账号还弹密钥框，是这次要修掉的毛病。
+ * @returns {Promise<boolean>} true 表示确实该提示。
+ */
+async function needsApiKeyNudge() {
+  if (accountSignedIn()) return false
+  if (!accountResolved()) {
+    /* 账号状态还没回来：给宿主一点时间再问一次，绝不贸然弹设置。 */
+    await new Promise(resolve => setTimeout(resolve, 700))
+    await loadAccount()
+    if (accountSignedIn()) return false
+  }
+  try {
+    const v = await rpc('credentials.describe', { refs: [KEY_REF] })
+    const c = v.credentials && v.credentials[KEY_REF]
+    return !(c && c.configured)
+  } catch {
     return false
   }
 }
@@ -2023,8 +3091,8 @@ function openDeskPet() {
   body.appendChild(secPet); petRows.forEach(r => body.appendChild(r)); body.appendChild(petHint)
   body.appendChild(reset)
   openModal('人物桌宠', body, [
-    { label: '关闭', onClick: () => window.removeEventListener('dsh:npc-avatar-changed', syncPreview) },
-  ])
+    { label: '关闭', onClick: () => { } },
+  ], () => window.removeEventListener('dsh:npc-avatar-changed', syncPreview))
 }
 
 /* ---------- 插件管理 ---------- */
@@ -2075,54 +3143,457 @@ function parsePresetPlugins(content) {
   }
   return Array.from(seen.values()).filter(r => r.name.startsWith('@deepseek-ai/'))
 }
-async function openPluginManager() {
-  const presetId = state.agentPreset || 'standard'
-  let content = ''
-  try {
-    const v = await rpc('agentPreset.read', { agentPreset: presetId })
-    content = v.content
-  } catch (e) { toast('读取预设失败: ' + e.message, 'err'); return }
-  const rows = parsePresetPlugins(content)
+/* ---------- 插件管理（搜索 / 检查 / 安装 / 启停 / 卸载） ---------- */
+/** npm registry 搜索地址；浏览器直连（registry 带 `access-control-allow-origin: *`）。 */
+const NPM_SEARCH = 'https://registry.npmjs.org/-/v1/search'
+
+/**
+ * 在 npm 上搜 dsh 插件。宿主的 pluginManager 只按 spec 装包、没有搜索接口，
+ * 所以这里直接问公开 registry；失败时提示用户直接输入包名/仓库地址。
+ * @param {string} query - 关键词。
+ * @returns {Promise<{items: object[], total: number}>} 搜索结果（已按 dsh 相关度排序）。
+ */
+async function searchNpmPlugins(query) {
+  const text = query.trim() === '' ? 'keywords:dsh-plugin' : query.trim()
+  const url = NPM_SEARCH + '?text=' + encodeURIComponent(text) + '&size=25'
+  const res = await fetch(url, { headers: { accept: 'application/json' } })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  const json = await res.json()
+  const objects = Array.isArray(json.objects) ? json.objects : []
+  const items = objects.map(o => ({
+    name: o.package && o.package.name ? o.package.name : '',
+    version: o.package && o.package.version ? o.package.version : '',
+    description: o.package && o.package.description ? o.package.description : '',
+    date: o.package && o.package.date ? o.package.date : '',
+    links: (o.package && o.package.links) || {},
+  })).filter(i => i.name !== '')
+  // dsh 相关的排前面（名字里带 dsh / 描述里提到 Harness）
+  const score = (i) => (/dsh/i.test(i.name) ? 2 : 0) + (/deepseek|harness/i.test(i.description) ? 1 : 0)
+  items.sort((a, b) => score(b) - score(a))
+  return { items, total: Number(json.total) || items.length }
+}
+
+/** 插件管理弹窗：已安装（启停/卸载）+ 搜索安装 + 当前预设清单。 */
+async function openPluginHub() {
   const body = document.createElement('div')
   const tip = document.createElement('div')
-  tip.style.fontSize = '12px'
-  tip.style.color = 'var(--stone)'
-  tip.textContent = '插件由当前模式（' + (PRESET_NAMES[presetId] || presetId) + '）的预设文件决定，切换模式即更换插件组合。'
+  tip.className = 'tree-tip'
+  tip.textContent = '插件就是 npm 包（形如 dsh-plugin-xxx / @scope/dsh-xxx），安装后会写进当前 profile 的 bundles；改动通常需要重启应用才完全生效。'
   body.appendChild(tip)
-  const list = document.createElement('div')
-  list.className = 'plugin-list'
-  for (const r of rows) {
-    const short = r.name.replace('@deepseek-ai/', '')
-    const row = document.createElement('div')
-    row.className = 'plugin-row' + (r.off ? ' off' : '')
-    const nm = document.createElement('span')
-    nm.className = 'pj-name'
-    nm.textContent = short + (r.count > 1 ? ' ×' + r.count : '')
-    const desc = document.createElement('span')
-    desc.className = 'pj-desc'
-    desc.textContent = (PLUGIN_DESC[short] || 'dsh 插件') + (r.off ? '（已停用）' : '')
-    row.appendChild(nm); row.appendChild(desc)
-    list.appendChild(row)
+
+  const installedBox = document.createElement('div')
+  installedBox.className = 'plugin-list'
+  body.appendChild(installedBox)
+
+  const registries = document.createElement('div')
+  registries.className = 'tree-tip'
+  body.appendChild(registries)
+
+  /* ---- 搜索安装 ---- */
+  const secTitle = document.createElement('div')
+  secTitle.className = 'group-label'
+  secTitle.textContent = '搜索并安装'
+  body.appendChild(secTitle)
+
+  const searchRow = document.createElement('div')
+  searchRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center'
+  const input = document.createElement('input')
+  input.className = 'pixel-input'
+  input.placeholder = '关键词（如 归档 / archive / dsh-plugin-xxx），或直接粘贴包名 / git 仓库地址'
+  input.style.flex = '1'
+  input.style.minWidth = '180px'
+  const searchBtn = document.createElement('button')
+  searchBtn.className = 'pixel-btn btn-sm'
+  searchBtn.textContent = '搜索'
+  const inspectBtn = document.createElement('button')
+  inspectBtn.className = 'pixel-btn btn-sm'
+  inspectBtn.textContent = '检查'
+  searchRow.appendChild(input); searchRow.appendChild(searchBtn); searchRow.appendChild(inspectBtn)
+  body.appendChild(searchRow)
+
+  const hint = document.createElement('div')
+  hint.className = 'tree-tip'
+  hint.textContent = '「检查」只解析 spec（不安装）；「搜索」问公开 npm registry。搜不到不等于装不了 —— 没发布到 npm 的插件用下面的「本地 / Git 来源」按路径或仓库地址装。'
+  body.appendChild(hint)
+
+  /* ---- 本地 / Git 来源安装 ---- */
+  const secLocal = document.createElement('div')
+  secLocal.className = 'group-label'
+  secLocal.textContent = '本地 / Git 来源安装'
+  body.appendChild(secLocal)
+
+  const localRow = document.createElement('div')
+  localRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center'
+  const localInput = document.createElement('input')
+  localInput.className = 'pixel-input'
+  localInput.placeholder = '绝对路径（D:\\code\\my-plugin 或 *.tgz），或仓库地址（https://github.com/你/仓库、github:你/仓库）'
+  localInput.style.flex = '1'
+  localInput.style.minWidth = '200px'
+  const localPickDir = document.createElement('button')
+  localPickDir.className = 'pixel-btn btn-sm'
+  localPickDir.textContent = '选择文件夹…'
+  const localPickTgz = document.createElement('button')
+  localPickTgz.className = 'pixel-btn btn-sm'
+  localPickTgz.textContent = '选择 .tgz…'
+  const localInspect = document.createElement('button')
+  localInspect.className = 'pixel-btn btn-sm'
+  localInspect.textContent = '检查'
+  const localInstall = document.createElement('button')
+  localInstall.className = 'pixel-btn btn-sm btn-gold'
+  localInstall.textContent = '安装'
+  localRow.appendChild(localInput); localRow.appendChild(localPickDir)
+  localRow.appendChild(localPickTgz); localRow.appendChild(localInspect); localRow.appendChild(localInstall)
+  body.appendChild(localRow)
+
+  const localHint = document.createElement('div')
+  localHint.className = 'tree-tip'
+  localHint.textContent = '宿主要求本地路径是绝对路径（写 D:\\code\\my-plugin，别写 file:///… 或相对路径），目录里要有 package.json。桌面应用里「选择文件夹…」直接给出宿主绝对路径，也可以把文件夹拖到这一行；浏览器拿不到真实路径，请手动补全。'
+  body.appendChild(localHint)
+
+  /* 拖入文件夹/压缩包直接取宿主绝对路径（桌面壳的 preload 提供 pathFor）。 */
+  localRow.addEventListener('dragover', (ev) => {
+    ev.preventDefault()
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'
+    localRow.style.outline = '2px dashed var(--gold)'
+  })
+  localRow.addEventListener('dragleave', () => { localRow.style.outline = '' })
+  localRow.addEventListener('drop', (ev) => {
+    ev.preventDefault()
+    localRow.style.outline = ''
+    const dropped = parseDropPath(ev.dataTransfer)
+    if (dropped === null) {
+      toast('拿不到这个条目的真实路径，请手动粘贴绝对路径', 'err')
+      return
+    }
+    localInput.value = dropped
+    localHint.textContent = '已选中：' + dropped
+  })
+
+  const tgzInput = document.createElement('input')
+  tgzInput.type = 'file'
+  tgzInput.accept = '.tgz,.tar.gz,application/gzip'
+  tgzInput.hidden = true
+  body.appendChild(tgzInput)
+  localPickTgz.addEventListener('click', () => tgzInput.click())
+  tgzInput.addEventListener('change', () => {
+    const file = tgzInput.files && tgzInput.files[0]
+    tgzInput.value = ''
+    if (!file) return
+    const hostPaths = window.__DSH_HOST_PATHS__
+    let path = ''
+    try { if (hostPaths && typeof hostPaths.pathFor === 'function') path = hostPaths.pathFor(file) || '' } catch { path = '' }
+    if (path === '') {
+      localInput.value = file.name
+      localHint.textContent = '浏览器拿不到真实路径（只拿到文件名 ' + file.name + '）：请把它的完整路径粘进输入框再装。'
+      toast('浏览器不给完整路径，请手动补全', 'err')
+      return
+    }
+    localInput.value = path
+    localHint.textContent = '已选中：' + path
+  })
+  localPickDir.addEventListener('click', () => {
+    const picker = window.__DSH_DIRECTORY_PICKER__
+    if (!(picker && typeof picker.pick === 'function')) {
+      toast('浏览器里拿不到绝对路径，请手动粘贴插件目录', 'err')
+      localHint.textContent = '浏览器拿不到绝对路径：桌面应用里才能用选择器，这里请手动粘贴（如 D:\\code\\my-plugin）。'
+      return
+    }
+    localPickDir.disabled = true
+    Promise.resolve(picker.pick())
+      .then((picked) => {
+        localPickDir.disabled = false
+        if (typeof picked !== 'string' || picked === '') return
+        localInput.value = picked
+        localHint.textContent = '已选中：' + picked
+      })
+      .catch((e) => { localPickDir.disabled = false; toast('选择文件夹失败: ' + errText(e), 'err') })
+  })
+  localInspect.addEventListener('click', () => inspectSpec(localInput.value.trim(), localInspect))
+  localInstall.addEventListener('click', () => {
+    const spec = localInput.value.trim()
+    if (spec === '') { toast('先填本地路径或仓库地址', 'err'); return }
+    installSpec(spec, localInstall)
+  })
+
+  const results = document.createElement('div')
+  results.className = 'plugin-list'
+  results.style.maxHeight = '180px'
+  results.style.overflowY = 'auto'
+  body.appendChild(results)
+
+  const logBox = document.createElement('div')
+  logBox.className = 'plugin-raw'
+  logBox.hidden = true
+  body.appendChild(logBox)
+
+  const appendLog = (line) => {
+    logBox.hidden = false
+    logBox.textContent += (logBox.textContent === '' ? '' : '\n') + line
+    logBox.scrollTop = logBox.scrollHeight
   }
-  body.appendChild(list)
-  const raw = document.createElement('div')
-  raw.className = 'plugin-raw'
-  raw.hidden = true
-  raw.textContent = content
-  body.appendChild(raw)
-  openModal('插件管理', body, [
-    { label: '关闭', onClick: () => { } },
-    {
-      label: '查看原始文件', keep: true, onClick: (btn) => {
-        raw.hidden = !raw.hidden
-        if (btn) btn.textContent = raw.hidden ? '查看原始文件' : '隐藏原始文件'
-      },
-    },
-  ])
+  state.pluginLog = appendLog
+
+  /* ---- 已安装 bundle ---- */
+  let bundleNames = new Set()
+  const renderBundles = (bundles) => {
+    installedBox.innerHTML = ''
+    bundleNames = new Set(bundles.map(b => b.name))
+    const label = document.createElement('div')
+    label.className = 'group-label'
+    label.textContent = '已安装（' + bundles.length + '）'
+    installedBox.appendChild(label)
+    if (bundles.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'tree-tip'
+      empty.textContent = '（宿主没有报告任何 bundle）'
+      installedBox.appendChild(empty)
+      return
+    }
+    for (const b of bundles) {
+      const row = document.createElement('div')
+      row.className = 'list-row' + (b.enabled ? '' : ' r-arch')
+      const main = document.createElement('div')
+      main.className = 'r-main'
+      const nm = document.createElement('div')
+      nm.className = 'r-name'
+      const title = typeof b.meta?.title === 'string' ? b.meta.title : (typeof b.meta?.title?.en === 'string' ? b.meta.title.en : '')
+      nm.textContent = b.name + (b.version ? ' @' + b.version : '') + (title ? ' · ' + title : '')
+      const mt = document.createElement('div')
+      mt.className = 'r-meta'
+      mt.textContent = [b.description || b.meta?.description || '', b.enabled ? '已启用' : '已停用',
+        b.removable ? '' : '内置（不可卸载）', b.error?.code ? '错误: ' + b.error.code : ''].filter(Boolean).join(' · ')
+      main.appendChild(nm); main.appendChild(mt)
+      row.appendChild(main)
+      const toggle = document.createElement('button')
+      toggle.className = 'pixel-btn btn-sm r-act'
+      toggle.textContent = b.enabled ? '停用' : '启用'
+      toggle.disabled = Boolean(b.readOnlyReason)
+      toggle.addEventListener('click', () => {
+        toggle.disabled = true
+        rpc('pluginManager.setBundleEnabled', { name: b.name, enabled: !b.enabled })
+          .then(r => { afterChange(r, (b.enabled ? '已停用 ' : '已启用 ') + b.name); return refresh() })
+          .catch(e => { toggle.disabled = false; toast('操作失败: ' + errText(e), 'err') })
+      })
+      row.appendChild(toggle)
+      if (b.removable) {
+        const del = document.createElement('button')
+        del.className = 'pixel-btn btn-sm btn-danger r-act'
+        del.textContent = '卸载'
+        del.addEventListener('click', () => {
+          del.disabled = true
+          rpc('pluginManager.removeBundle', { name: b.name })
+            .then(r => { afterChange(r, '已卸载 ' + b.name); return refresh() })
+            .catch(e => { del.disabled = false; toast('卸载失败: ' + errText(e), 'err') })
+        })
+        row.appendChild(del)
+      }
+      installedBox.appendChild(row)
+      const rows = Array.isArray(b.rows) ? b.rows : []
+      if (rows.length > 1) {
+        const sub = document.createElement('div')
+        sub.className = 'r-meta'
+        sub.style.cssText = 'font-size:11px;color:var(--stone);margin:-4px 0 4px 10px'
+        sub.textContent = '包含 ' + rows.length + ' 个插件：' + rows.map(r => shortModule(r.moduleName)).join('、')
+        installedBox.appendChild(sub)
+      }
+    }
+  }
+
+  const refresh = async () => {
+    try {
+      const [bundles, regs] = await Promise.all([
+        rpc('pluginManager.listBundles', {}),
+        rpc('pluginManager.registries', {}).catch(() => null),
+      ])
+      renderBundles(Array.isArray(bundles) ? bundles : [])
+      registries.textContent = regs === null
+        ? ''
+        : '安装源：' + (regs.resolved || regs.registry || '（默认 npm）')
+          + (Array.isArray(regs.fallbackRegistries) && regs.fallbackRegistries.length > 0 ? '，回退 ' + regs.fallbackRegistries.length + ' 个' : '')
+      return bundleNames
+    } catch (e) {
+      installedBox.textContent = '读取插件列表失败: ' + errText(e)
+      return bundleNames
+    }
+  }
+
+  const renderResults = (items, note) => {
+    results.innerHTML = ''
+    const gl = document.createElement('div')
+    gl.className = 'group-label'
+    gl.textContent = note
+    results.appendChild(gl)
+    for (const it of items) {
+      const row = document.createElement('div')
+      row.className = 'list-row'
+      const main = document.createElement('div')
+      main.className = 'r-main'
+      const nm = document.createElement('div')
+      nm.className = 'r-name'
+      nm.textContent = it.name + (it.version ? ' @' + it.version : '')
+      const mt = document.createElement('div')
+      mt.className = 'r-meta'
+      mt.textContent = it.description || ''
+      main.appendChild(nm); main.appendChild(mt)
+      row.appendChild(main)
+      const act = document.createElement('button')
+      act.className = 'pixel-btn btn-sm r-act'
+      if (bundleNames.has(it.name)) { act.textContent = '已安装'; act.disabled = true } else { act.textContent = '安装' }
+      act.addEventListener('click', () => installSpec(it.name, act))
+      row.appendChild(act)
+      results.appendChild(row)
+    }
+    if (items.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'tree-tip'
+      empty.textContent = '（没有结果；可以直接在输入框里粘贴包名或仓库地址再点「检查」/「安装」）'
+      results.appendChild(empty)
+    }
+  }
+
+  const afterChange = (r, okLabel) => {
+    if (r && r.application === 'failed') {
+      toast(okLabel + '失败: ' + (r.error?.code || '') + ' ' + (r.error?.diagnostic || ''), 'err')
+      appendLog('✕ ' + okLabel + ' → ' + JSON.stringify(r).slice(0, 600))
+      return
+    }
+    const warn = (r && r.warnings) || []
+    toast(okLabel + (r && r.application === 'restart-required' ? '（需重启应用生效）' : ''), 'ok')
+    warn.forEach(w => appendLog('⚠ ' + w))
+    appendLog('✔ ' + okLabel + ' · application=' + (r && r.application) + ' stage=' + (r && r.stage))
+  }
+
+  const installSpec = (spec, btn) => {
+    if (btn) { btn.disabled = true; btn.textContent = '安装中…' }
+    appendLog('▶ 安装 ' + spec + ' …（pnpm 下载可能要一会儿）')
+    rpc('pluginManager.installBundle', { spec, enabled: true })
+      .then(r => {
+        afterChange(r, '已安装 ' + spec)
+        if (r && r.packageResult && r.packageResult.output) appendLog(String(r.packageResult.output).slice(-2000))
+        if (r && r.error && r.error.diagnostic) appendLog('诊断: ' + r.error.diagnostic)
+        return refresh()
+      })
+      .then(() => { if (btn) btn.textContent = '已安装' })
+      .catch(e => {
+        if (btn) { btn.disabled = false; btn.textContent = '安装' }
+        toast('安装失败: ' + errText(e), 'err')
+        appendLog('✕ ' + spec + ' → ' + errText(e))
+      })
+  }
+
+  const inspectSpec = (spec, btn) => {
+    if (spec === '') { toast('先填包名 / 仓库地址 / 本地路径', 'err'); return }
+    if (btn) btn.disabled = true
+    rpc('pluginManager.inspect', { spec })
+      .then(v => {
+        if (v.status === 'accepted') {
+          const note = '检查通过：' + (v.name || spec) + (v.version ? '@' + v.version : '')
+            + ' · 类型 ' + v.kind + ' · ' + (v.bundle === true ? '是 bundle（可直接装）' : v.bundle === false ? '不是 bundle（装了也不会挂载）' : '未声明 bundle')
+            + (v.description ? ' · ' + v.description : '')
+          appendLog('ℹ ' + note)
+          renderResults([{ name: v.name || spec, version: v.version || '', description: note }], '检查结果')
+        } else {
+          appendLog('✕ ' + spec + ' 被拒绝：' + v.problem + ' · ' + v.reason)
+          renderResults([], '被拒绝：' + v.problem + ' · ' + v.reason)
+        }
+      })
+      .catch(e => toast('检查失败: ' + errText(e), 'err'))
+      .finally(() => { if (btn) btn.disabled = false })
+  }
+
+  searchBtn.addEventListener('click', () => {
+    const q = input.value
+    searchBtn.disabled = true
+    searchBtn.textContent = '搜索中…'
+    searchNpmPlugins(q)
+      .then(({ items, total }) => renderResults(items, 'npm 结果（命中 ' + total + ' 个，显示前 ' + items.length + '）'))
+      .catch(e => {
+        renderResults([], 'npm 搜索不可用：' + errText(e))
+        toast('npm 搜索失败，可直接粘贴包名安装', 'err')
+      })
+      .finally(() => { searchBtn.disabled = false; searchBtn.textContent = '搜索' })
+  })
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); searchBtn.click() } })
+
+  inspectBtn.addEventListener('click', () => inspectSpec(input.value.trim(), inspectBtn))
+
+  /* ---- 当前预设的插件清单（原来是设置里的「插件管理」，挪到这里） ---- */
+  const presetBox = document.createElement('div')
+  presetBox.className = 'plugin-list'
+  body.appendChild(presetBox)
+  const presetRaw = document.createElement('div')
+  presetRaw.className = 'plugin-raw'
+  presetRaw.hidden = true
+  body.appendChild(presetRaw)
+  const presetId = state.agentPreset || 'standard'
+  rpc('agentPreset.read', { agentPreset: presetId }).then(v => {
+    const rows = parsePresetPlugins(v.content || '')
+    const gl = document.createElement('div')
+    gl.className = 'group-label'
+    gl.textContent = '当前模式（' + (PRESET_NAMES[presetId] || presetId) + '）的插件清单'
+    presetBox.appendChild(gl)
+    for (const r of rows) {
+      const short = shortModule(r.name)
+      const row = document.createElement('div')
+      row.className = 'plugin-row' + (r.off ? ' off' : '')
+      const nm = document.createElement('span')
+      nm.className = 'pj-name'
+      nm.textContent = short + (r.count > 1 ? ' ×' + r.count : '')
+      const desc = document.createElement('span')
+      desc.className = 'pj-desc'
+      desc.textContent = (PLUGIN_DESC[short] || 'dsh 插件') + (r.off ? '（已停用）' : '')
+      row.appendChild(nm); row.appendChild(desc)
+      presetBox.appendChild(row)
+    }
+    presetRaw.textContent = v.content || ''
+    const rawBtn = document.createElement('button')
+    rawBtn.className = 'pixel-btn btn-sm'
+    rawBtn.textContent = '查看原始预设文件'
+    rawBtn.addEventListener('click', () => {
+      presetRaw.hidden = !presetRaw.hidden
+      rawBtn.textContent = presetRaw.hidden ? '查看原始预设文件' : '隐藏原始预设文件'
+    })
+    body.appendChild(rawBtn)
+  }).catch(() => { /* 预设读不到就只留安装区 */ })
+
+  openModal('插件管理', body, [{ label: '关闭', onClick: () => { state.pluginLog = null } }], () => { state.pluginLog = null })
+  await refresh()
+  renderResults([], '还没有搜索')
+}
+
+/** 插件管理里的模块短名（去掉 @deepseek-ai/ 前缀）。 */
+function shortModule(name) {
+  return String(name || '').replace('@deepseek-ai/', '')
+}
+
+/** RPC 错误的可读文本。 */
+function errText(e) {
+  return e && e.message ? e.message : String(e)
 }
 
 function openSettings() {
   const body = document.createElement('div')
+  // 登录角色：账号登录 / API 密钥，放在最前面，一眼看清现在是哪种身份在跑
+  const roleRow = document.createElement('div')
+  roleRow.className = 'kv-row'
+  const roleKey = document.createElement('span'); roleKey.className = 'k k-title'; roleKey.textContent = '登录角色'
+  const roleVal = document.createElement('span'); roleVal.className = 'v'; roleVal.id = 'set-role'
+  /* 「退出登录」只挂在这一行：对话页顶栏 / HUD 不出现这个按钮（那里只报登录角色）。 */
+  const signOutBtn = document.createElement('button')
+  signOutBtn.className = 'pixel-btn btn-sm btn-danger'
+  signOutBtn.id = 'set-signout'
+  signOutBtn.textContent = '退出登录'
+  signOutBtn.title = '删除本机保存的账号凭据（不影响 API 密钥）'
+  signOutBtn.hidden = true // 默认藏起来，renderRoleRow 按「是否账号登录」决定显示
+  signOutBtn.addEventListener('click', () => { confirmSignOut() })
+  const roleActions = document.createElement('span')
+  roleActions.className = 'kv-actions'
+  roleActions.appendChild(roleVal); roleActions.appendChild(signOutBtn)
+  roleRow.appendChild(roleKey); roleRow.appendChild(roleActions)
+  const roleInfo = document.createElement('div')
+  roleInfo.id = 'set-role-detail'
+  roleInfo.style.fontSize = '12px'
+  roleInfo.style.color = 'var(--stone)'
   const row1 = document.createElement('div')
   row1.className = 'kv-row'
   const k1 = document.createElement('span'); k1.className = 'k k-title'; k1.textContent = 'DeepSeek API 密钥'
@@ -2235,27 +3706,85 @@ function openSettings() {
   bgmRow.appendChild(bgmDrop); bgmRow.appendChild(bgmToggle); bgmRow.appendChild(bgmVol)
   bgmRow.appendChild(bgmReset); bgmRow.appendChild(bgmFile)
 
-  // 插件管理区
-  const secPj = document.createElement('div')
-  secPj.className = 'set-section'
-  secPj.textContent = '插件'
-  const pjBtn = document.createElement('button')
-  pjBtn.className = 'pixel-btn btn-sm'
-  pjBtn.textContent = '打开插件管理'
-  pjBtn.addEventListener('click', openPluginManager)
+  // 界面区：插件管理已独立成顶栏按钮（见 openPluginHub），这里只留「重新载入界面」
+  const secUi = document.createElement('div')
+  secUi.className = 'set-section'
+  secUi.textContent = '界面'
+  /* 桌面壳在 Windows 上不注册刷新快捷键（应用菜单只有 F12 开发者工具），
+     主题页又是宿主现取的静态文件，所以给一个显式入口重新载入。 */
+  const reloadBtn = document.createElement('button')
+  reloadBtn.className = 'pixel-btn btn-sm'
+  reloadBtn.textContent = '重新载入界面'
+  reloadBtn.addEventListener('click', () => location.reload())
+  const hubBtn = document.createElement('button')
+  hubBtn.className = 'pixel-btn btn-sm'
+  hubBtn.style.marginLeft = '8px'
+  hubBtn.textContent = '打开插件管理'
+  hubBtn.addEventListener('click', () => openPluginHub())
 
+  body.appendChild(roleRow); body.appendChild(roleInfo)
   body.appendChild(row1); body.appendChild(keyActions); body.appendChild(info)
   body.appendChild(secWp); body.appendChild(wpRow)
   body.appendChild(secBgm); body.appendChild(bgmRow)
-  body.appendChild(secPj); body.appendChild(pjBtn)
+  body.appendChild(secUi); body.appendChild(reloadBtn); body.appendChild(hubBtn)
   openModal('设置', body, [
     // 「保存密钥」已从弹窗底部上移至密钥区；底部仅剩「关闭」，flex-end 使其占据最右位置
     { label: '关闭', onClick: () => { } },
   ])
+  renderRoleRow()
+  /* 角色还没查出来时补一次：查询回来后该显示的「退出登录」就能显示出来。 */
+  if (!accountResolved()) loadAccountWithRetry(3).then(() => { renderRoleRow() })
   refreshKeyStatus().then(ok => {
     const el = document.getElementById('set-key-status')
     if (el) el.textContent = ok ? '已配置' : '未配置'
   })
+}
+
+/**
+ * 退出登录前的确认框。
+ *
+ * 宿主删除账号凭据会打断正在使用该账号的任务（官方前端也先问一次），所以先查
+ * 「有没有账号任务在跑」，查不到就按未知措辞提示。确认后关掉确认框执行退出。
+ */
+async function confirmSignOut() {
+  let running = null
+  try {
+    running = await rpc('account.hasRunningAccountTasks')
+  } catch {
+    running = null // 查不到就当作未知，只影响措辞
+  }
+  const body = document.createElement('div')
+  body.style.fontSize = '13px'
+  const detail = running === true
+    ? '当前有正在执行的任务，退出登录会打断它们。'
+    : running === false
+      ? '退出登录不会删除任何数据，之后仍可重新登录这个账号。'
+      : '暂时无法确认任务状态，退出登录可能会打断正在使用该账号的任务。'
+  body.textContent = detail + '退出登录会删除本机保存的账号凭据（不影响已配置的 API 密钥）。确定退出吗？'
+  openModal('退出登录', body, [
+    /* 「取消」回到设置弹窗：确认框复用了同一个模态容器，退回设置省得再点一次顶栏。 */
+    { label: '取消', onClick: () => { openSettings() } },
+    { label: '退出登录', danger: true, onClick: () => { signOutAccount() } },
+  ])
+}
+
+/**
+ * 把登录角色写进设置弹窗（弹窗可能没开，就地跳过）。
+ *
+ * 账号登录时说清楚「不需要再填密钥」，并给出「退出登录」；密钥模式没有可退的
+ * 登录，按钮就地藏起来。这个按钮只属于设置弹窗，对话页不显示它。
+ */
+function renderRoleRow() {
+  const role = accountRoleText()
+  const el = document.getElementById('set-role')
+  const detail = document.getElementById('set-role-detail')
+  const out = document.getElementById('set-signout')
+  if (el) el.textContent = role.role
+  if (detail) {
+    detail.textContent = role.detail
+      + (accountSignedIn() ? '。账号凭据由宿主保管并自动用于模型调用，无需再填写 API 密钥。' : '')
+  }
+  if (out) out.hidden = !accountSignedIn()
 }
 
 /* ---------- 模型选择 ---------- */
@@ -2517,7 +4046,7 @@ function applyModel(sel) {
   state.model = sel
   $('#hud-model-name').textContent = sel.model
   $('#hud-model-desc').textContent = '提供方：' + sel.provider + (sel.reasoningEffort ? ' · 思考：' + sel.reasoningEffort : '')
-  $('#mode-badge').textContent = sel.model
+  /* 顶栏的模型徽章已删掉：HUD「当前模型」已经显示同一条信息，顶栏只留会话名。 */
 }
 
 /* ---------- 模式选择（人物创建风格弹窗） ---------- */
@@ -2630,6 +4159,17 @@ function rootNameFromFiles(files) {
 
 /** 从拖放数据解析绝对路径（file:///E:/a/b、E:\a\b 或 \\srv\share）；取不到返回 null。 */
 function parseDropPath(dt) {
+  /* 桌面壳（Electron）里 DataTransfer 不再暴露 file.path，但 preload 提供了
+     __DSH_HOST_PATHS__.pathFor(file)，它能给出真正的宿主绝对路径。 */
+  const hostPaths = window.__DSH_HOST_PATHS__
+  if (hostPaths && typeof hostPaths.pathFor === 'function' && dt && dt.files) {
+    for (const file of dt.files) {
+      try {
+        const p = hostPaths.pathFor(file)
+        if (typeof p === 'string' && p !== '') return p
+      } catch { /* 单个文件取不到就继续 */ }
+    }
+  }
   for (const t of ['text', 'text/uri-list', 'text/plain']) {
     let s = ''
     try { s = dt.getData(t) } catch { /* 该类型不可读时尝试下一个 */ }
@@ -2747,7 +4287,27 @@ async function openWorkspace() {
       dirInput.value = ''
       applyPickedFolderUI(pathInput, pickHint, ws.items, root)
     })
-    pickBtn.addEventListener('click', () => dirInput.click())
+    /* 桌面壳里 preload 提供了原生目录选择器，它直接返回宿主绝对路径；
+       浏览器没有这个能力，于是退回 webkitdirectory + 手工补全路径。 */
+    pickBtn.addEventListener('click', () => {
+      const picker = window.__DSH_DIRECTORY_PICKER__
+      if (picker && typeof picker.pick === 'function') {
+        pickBtn.disabled = true
+        Promise.resolve(picker.pick())
+          .then((picked) => {
+            pickBtn.disabled = false
+            if (typeof picked !== 'string' || picked === '') return  // 用户取消
+            pathInput.value = picked
+            pickHint.style.display = 'none'
+          })
+          .catch((error) => {
+            pickBtn.disabled = false
+            toast('选择文件夹失败: ' + String((error && error.message) || error), 'err')
+          })
+        return
+      }
+      dirInput.click()
+    })
     const addBtn = document.createElement('button')
     addBtn.id = 'ws-add-btn'
     addBtn.className = 'pixel-btn btn-sm'
@@ -2820,11 +4380,12 @@ async function newSession(opts = {}) {
     enterMain()
     /* 0.2.x 的会话事件只从 session/follow 流到达，新会话同样要订阅。 */
     followSession(state.sessionId).catch(e => toast('订阅会话失败: ' + e.message, 'err'))
-    refreshKeyStatus().then(ok => {
-      if (!ok) {
-        appendSysLine('尚未配置 API 密钥：点击右上「设置」保存密钥后即可对话。')
-        setTimeout(openSettings, 400)
-      }
+    refreshKeyStatus()
+    /* 只有「确实没登录账号、也确实没有密钥」才提示；登录了 DeepSeek 账号就不再弹设置。 */
+    needsApiKeyNudge().then(need => {
+      if (!need) return
+      appendSysLine('尚未配置 API 密钥：点击右上「设置」保存密钥后即可对话。')
+      setTimeout(openSettings, 400)
     })
     loadModelsForHud()
     if (opts.title) appendSysLine('本会话工作在：' + opts.title)
@@ -2833,44 +4394,271 @@ async function newSession(opts = {}) {
   }
 }
 
+/* ---------- 继续会话：工作空间为父、会话为子的文件夹树 ---------- */
+
+/** 「继续会话」里被折叠的父节点（同一次页面会话里保持，重开弹窗不丢）；归档区不参与，它每次都是收起的。 */
+const continueCollapsed = new Set()
+
+/** 取 session/list 项的投影值（title / agentPreset 都在 projections.values 里）。 */
+function sessionProjection(s, key) {
+  const values = s === null || s === undefined ? null : s.projections && s.projections.values
+  return values && typeof values === 'object' ? values[key] : undefined
+}
+
+/** 顶栏会话名：优先当前工作空间名（如 dsh_theme_terraria），没挂工作空间时退回模式名。 */
+function sessionTitleLabel() {
+  if (state.workspaceTitle) return state.workspaceTitle
+  return (state.agentPreset && PRESET_NAMES[state.agentPreset]) || '向导'
+}
+
+/** 路径尾段（工作空间名 / 目录名），Windows 与 POSIX 分隔符都认。 */
+function pathTail(p) {
+  return String(p === null || p === undefined ? '' : p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || ''
+}
+
+/** 两个路径是否同一个目录（忽略大小写与尾部分隔符）。 */
+function sameDir(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a === '' || b === '') return false
+  const norm = (v) => v.replace(/[\\/]+$/, '').replaceAll('\\', '/').toLowerCase()
+  return norm(a) === norm(b)
+}
+
+/**
+ * 把会话按「工作空间为父、会话为子」分组。
+ * 归属以 workspace/follow 的 sessionIds 为准，cwd 命中工作空间路径时兜底补上；
+ * 剩下的按 cwd 尾段各成一组，没有 cwd 的落到「未归入工作空间」。
+ * @param {object[]} items - session/list 里已过滤（非空会话、非子代理）的项。
+ * @param {object} wsValue - workspace/follow 的 baseline（items / archivedSessionIds）。
+ * @returns {{groups: {title: string, path: string, children: object[]}[], archived: Set<string>}}
+ */
+function groupSessionsByWorkspace(items, wsValue) {
+  const archived = new Set(wsValue.archivedSessionIds || [])
+  const live = items.filter(s => !archived.has(s.sessionId))
+  const byId = new Map(live.map(s => [s.sessionId, s]))
+  const claimed = new Set()
+  const groups = []
+  for (const w of wsValue.items || []) {
+    const children = []
+    for (const id of w.sessionIds || []) {
+      const s = byId.get(id)
+      if (s !== undefined && !claimed.has(id)) { children.push(s); claimed.add(id) }
+    }
+    for (const s of live) {
+      if (!claimed.has(s.sessionId) && sameDir(s.cwd, w.path)) { children.push(s); claimed.add(s.sessionId) }
+    }
+    if (children.length > 0) groups.push({ title: w.title || pathTail(w.path) || w.path, path: w.path || '', children })
+  }
+  const orphans = new Map()
+  for (const s of live) {
+    if (claimed.has(s.sessionId)) continue
+    const hasCwd = typeof s.cwd === 'string' && s.cwd !== ''
+    const key = hasCwd ? (pathTail(s.cwd) || s.cwd) : '未归入工作空间'
+    if (!orphans.has(key)) orphans.set(key, { title: key, path: hasCwd ? s.cwd : '', children: [] })
+    orphans.get(key).children.push(s)
+  }
+  return { groups: groups.concat([...orphans.values()]), archived }
+}
+
+/** 组内按最近活动倒序：第 1 个对话就是最新的那个。 */
+function byRecency(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0) }
+
+/**
+ * 归档区只放「真正的对话」：子智能体（subagent）的会话不是独立对话，
+ * 它们是父对话的执行记录，父对话归档时一起进了归档集。
+ *
+ * 之前这些子会话会跟着进归档区，把那一栏撑成一大串「第 x 个对话」，
+ * 看上去就像归档区自己展开了子对话；这里连同「父已归档」的孤儿一起滤掉。
+ * @param {object[]} items - 全部会话项（已滤掉空白会话）。
+ * @param {Set<string>} archived - 归档集。
+ * @returns {object[]} 归档区要显示的项。
+ */
+function archivedTopLevelItems(items, archived) {
+  return items.filter(s => {
+    if (!archived.has(s.sessionId)) return false
+    if (s.origin === 'subagent') return false
+    if (s.parentSessionId !== undefined && s.parentSessionId !== null) return false
+    return true
+  })
+}
+
+/**
+ * 一行会话（子节点）：名字是「第 N 个对话」，行尾一个「归档 / 取消归档」按钮。
+ * @param {object} s - session/list 项。
+ * @param {number} index - 组内序号（从 1 开始，按最近活动倒序）。
+ * @param {'archive'|'unarchive'} mode - 行尾按钮的动作。
+ * @param {string|null} wsTitle - 该会话所属工作空间名（进入会话后显示在顶栏）。
+ */
+function buildSessionRow(s, index, mode, wsTitle) {
+  const row = document.createElement('div')
+  row.className = 'list-row r-sub' + (mode === 'unarchive' ? ' r-arch' : '')
+  const main = document.createElement('div')
+  main.className = 'r-main'
+  const nm = document.createElement('div')
+  nm.className = 'r-name'
+  const title = sessionProjection(s, 'title')
+  nm.textContent = '第 ' + index + ' 个对话' + (typeof title === 'string' && title !== '' ? ' · ' + title : '')
+  const mt = document.createElement('div')
+  mt.className = 'r-meta'
+  mt.textContent = [new Date(s.updatedAt).toLocaleString(), s.running ? '运行中' : '', s.cwd || ''].filter(Boolean).join(' · ')
+  main.appendChild(nm); main.appendChild(mt)
+  row.appendChild(main)
+
+  const label = '第 ' + index + ' 个对话'
+  const act = document.createElement('button')
+  act.className = 'pixel-btn btn-sm r-act'
+  act.textContent = mode === 'archive' ? '归档' : '取消归档'
+  act.title = mode === 'archive' ? '把「' + label + '」收进归档（之后还能取消归档）' : '把「' + label + '」从归档里放回来'
+  act.addEventListener('click', (ev) => {
+    ev.stopPropagation()
+    act.disabled = true
+    const method = mode === 'archive' ? 'workspace.archiveSession' : 'workspace.unarchiveSession'
+    const payload = mode === 'archive' && s.running ? { sessionId: s.sessionId, stopActivity: true } : { sessionId: s.sessionId }
+    rpc(method, payload)
+      .then(() => {
+        toast((mode === 'archive' ? '已归档：' : '已取消归档：') + label + (mode === 'archive' && s.running ? '（并停止了它的运行）' : ''), 'ok')
+        return openContinueList()
+      })
+      .catch((e) => {
+        act.disabled = false
+        toast((mode === 'archive' ? '归档失败: ' : '取消归档失败: ') + (e && e.message ? e.message : e), 'err')
+      })
+  })
+  row.appendChild(act)
+
+  row.addEventListener('click', () => continueSession(s, wsTitle))
+  return row
+}
+
+/** 继续一个历史会话：记住它的工作空间名（顶栏显示用）再进入。 */
+function continueSession(s, wsTitle) {
+  state.sessionId = s.sessionId
+  state.agentPreset = sessionProjection(s, 'agentPreset') || null
+  state.workspaceTitle = wsTitle || pathTail(s.cwd) || null
+  state.historyLoaded = false
+  enterMain()
+  loadHistory()
+  loadModelsForHud()
+  closeModal()
+}
+
+/**
+ * 父节点：工作空间标题行 + 它下面的一列会话；点标题行折叠 / 展开。
+ * @param {{title: string, path: string, children: object[]}} group - 分组。
+ * @param {(s: object) => string|null} wsTitleOf - 会话 → 工作空间名。
+ */
+function buildSessionFolder(group, wsTitleOf) {
+  const wrap = document.createElement('div')
+  wrap.className = 'tree-group'
+  const collapsed = continueCollapsed.has(group.title)
+  const head = document.createElement('div')
+  head.className = 'list-row ws-folder'
+  const caret = document.createElement('span')
+  caret.className = 'f-caret'
+  caret.textContent = collapsed ? '▸' : '▾'
+  const main = document.createElement('div')
+  main.className = 'r-main'
+  const nm = document.createElement('div')
+  nm.className = 'r-name'
+  nm.textContent = group.title
+  const mt = document.createElement('div')
+  mt.className = 'r-meta'
+  mt.textContent = (group.path ? group.path + ' · ' : '') + group.children.length + ' 个对话'
+  main.appendChild(nm); main.appendChild(mt)
+  head.appendChild(caret); head.appendChild(main)
+
+  const kids = document.createElement('div')
+  kids.className = 'tree-kids'
+  kids.hidden = collapsed
+  const ordered = [...group.children].sort(byRecency)
+  ordered.forEach((s, i) => kids.appendChild(buildSessionRow(s, i + 1, 'archive', wsTitleOf(s))))
+
+  head.addEventListener('click', () => {
+    const open = continueCollapsed.has(group.title)
+    if (open) continueCollapsed.delete(group.title)
+    else continueCollapsed.add(group.title)
+    caret.textContent = open ? '▾' : '▸'
+    kids.hidden = !open
+  })
+  wrap.appendChild(head); wrap.appendChild(kids)
+  return wrap
+}
+
+/** 「继续会话」弹窗：工作空间（父）→ 第 x 个对话（子，带归档按钮），底部是可取消的归档区。 */
 async function openContinueList() {
   let v
   try { v = await rpc('session.list', {}) }
   catch (e) { toast('读取会话列表失败: ' + e.message, 'err'); return }
+  let wsValue = { items: [], archivedSessionIds: [], pinnedSessionIds: [] }
+  try { wsValue = await rpc('workspace.list', {}) || wsValue } catch { /* 工作空间读不到就全部按未归入列出 */ }
   const items = (v.items || []).filter(s => !s.blank && s.origin !== 'subagent')
+  const allItems = (v.items || []).filter(s => !s.blank)
+  const { groups, archived } = groupSessionsByWorkspace(items, wsValue)
+  /** 会话所属工作空间名：sessionIds 命中就用工作空间标题，否则退回 cwd 尾段。 */
+  const wsTitleOf = (s) => {
+    for (const w of wsValue.items || []) {
+      if ((w.sessionIds || []).includes(s.sessionId)) return w.title || pathTail(w.path) || null
+    }
+    return pathTail(s.cwd) || null
+  }
+
   const body = document.createElement('div')
-  if (items.length === 0) {
+  const tip = document.createElement('div')
+  tip.className = 'tree-tip'
+  tip.textContent = '工作空间是父节点（点它折叠 / 展开），会话是子节点：点会话行继续对话，点行尾「归档」把它收起来。组内按最近活动排序，第 1 个是最新的。'
+  body.appendChild(tip)
+
+  const archivedItems = archivedTopLevelItems(allItems, archived)
+  if (groups.length === 0 && archivedItems.length === 0) {
     const el = document.createElement('div')
     el.textContent = '还没有可继续的会话。先「新的会话」开启旅途吧。'
     body.appendChild(el)
   }
-  for (const s of items) {
-    const row = document.createElement('div')
-    row.className = 'list-row'
-    const main = document.createElement('div')
-    main.className = 'r-main'
-    const nm = document.createElement('div')
-    nm.className = 'r-name'
-    const title = s.projections && s.projections.values && s.projections.values.title
-    nm.textContent = typeof title === 'string' && title ? title : '会话 ' + String(s.sessionId).slice(0, 8)
-    const mt = document.createElement('div')
-    mt.className = 'r-meta'
-    mt.textContent = new Date(s.updatedAt).toLocaleString() + (s.running ? ' · 运行中' : '') + (s.cwd ? ' · ' + s.cwd : '')
-    main.appendChild(nm); main.appendChild(mt)
-    row.appendChild(main)
-    row.addEventListener('click', () => {
-      state.sessionId = s.sessionId
-      state.agentPreset = s.agentPreset || null
-      state.workspaceTitle = null
-      state.historyLoaded = false
-      enterMain()
-      loadHistory()
-      loadModelsForHud()
-      closeModal()
-    })
-    body.appendChild(row)
-  }
+  for (const g of groups) body.appendChild(buildSessionFolder(g, wsTitleOf))
+  if (archivedItems.length > 0) body.appendChild(buildArchivedFolder(archivedItems, wsTitleOf))
+
   openModal('继续会话', body, [{ label: '关闭', onClick: () => { } }])
+}
+
+/**
+ * 「已归档」父节点：每次打开「继续会话」都以收起态出现，里面每行可以取消归档（放回原工作空间）。
+ *
+ * 这里不写 `continueCollapsed`：展开状态只活在这个弹窗里。之前它和会话组共用
+ * 那份「折叠记忆」，一旦展开过就会一直被记住，下次打开看起来就像归档区自己
+ * 把子对话摊开了。
+ * @param {object[]} archivedItems - 归档中的会话项。
+ * @param {(s: object) => string|null} wsTitleOf - 会话 → 工作空间名。
+ */
+function buildArchivedFolder(archivedItems, wsTitleOf) {
+  const wrap = document.createElement('div')
+  wrap.className = 'tree-group'
+  const head = document.createElement('div')
+  head.className = 'list-row ws-folder'
+  const caret = document.createElement('span')
+  caret.className = 'f-caret'
+  caret.textContent = '▸'
+  const main = document.createElement('div')
+  main.className = 'r-main'
+  const nm = document.createElement('div')
+  nm.className = 'r-name'
+  nm.textContent = '已归档'
+  const mt = document.createElement('div')
+  mt.className = 'r-meta'
+  mt.textContent = archivedItems.length + ' 个对话 · 取消归档后会回到原来的工作空间'
+  main.appendChild(nm); main.appendChild(mt)
+  head.appendChild(caret); head.appendChild(main)
+
+  const kids = document.createElement('div')
+  kids.className = 'tree-kids'
+  kids.hidden = true
+  const ordered = [...archivedItems].sort(byRecency)
+  ordered.forEach((s, i) => kids.appendChild(buildSessionRow(s, i + 1, 'unarchive', wsTitleOf(s))))
+
+  head.addEventListener('click', () => {
+    kids.hidden = !kids.hidden
+    caret.textContent = kids.hidden ? '▸' : '▾'
+  })
+  wrap.appendChild(head); wrap.appendChild(kids)
+  return wrap
 }
 
 function enterMain() {
@@ -2881,12 +4669,120 @@ function enterMain() {
   state.streamEl = null
   state.streamWrap = null
   state.pendingUserText = null
+  state.pendingAttachmentsOnly = false
+  state.attachments = []
+  // 换会话/重进主屏：锚点与速率都从零开始
+  state.anchors = []
+  state.anchorSeq = 0
+  state.navCurrent = null
+  state.navTimer = null
+  state.historyRecords = []
+  state.historyOldest = null
+  state.historyHasMore = false
+  resetRate()
+  if (state.navOpen) rebuildNav()
+  renderAttachRail()
   renderTodos([])
   setRunning(false)
-  $('#main-session-name').textContent = (state.agentPreset && PRESET_NAMES[state.agentPreset]) || '向导'
-  if (state.workspaceTitle) $('#main-session-name').textContent += '@' + state.workspaceTitle
+  $('#main-session-name').textContent = sessionTitleLabel()
   appendSysLine('欢迎来到泰拉瑞亚！我是你的' + state.npcName + '。')
   $('#chat-input').focus()
+  /* 载入时主屏还是 hidden，写出来全是 0 尺寸；真正进主屏后补一次几何自检。 */
+  writeShellDiagnostics()
+}
+
+/** 记录里最小的 seq（翻页的 beforeSeq 上界）。 */
+function oldestSeqOf(records) {
+  let oldest = null
+  for (const r of records) {
+    const seq = r && r.event ? r.event.seq : undefined
+    if (typeof seq === 'number' && (oldest === null || seq < oldest)) oldest = seq
+  }
+  return oldest
+}
+
+/**
+ * 往前翻一页历史。`session/follow` 的 snapshot 只是一窗（实测约 300 条、只含最近一次提问），
+ * 更早的对话必须用 `session/page`（throughSeq 含 / beforeSeq 不含）补回来。
+ * @returns {Promise<number>} 本页新增的记录条数。
+ */
+async function pageOlderHistory(sessionId, maxMessages) {
+  if (state.historyHasMore !== true || state.historyCursor === null || state.historyOldest === null) return 0
+  const page = await rpc('session.page', {
+    sessionId,
+    throughSeq: state.historyCursor,
+    beforeSeq: state.historyOldest,
+    maxMessages,
+  })
+  const records = Array.isArray(page && page.records) ? page.records : []
+  if (records.length === 0) { state.historyHasMore = false; return 0 }
+  state.historyRecords = records.concat(state.historyRecords)
+  const oldest = oldestSeqOf(records)
+  if (oldest !== null) state.historyOldest = oldest
+  state.historyHasMore = page.hasMore === true
+  return records.length
+}
+
+/** 把已加载的记录按时间序渲染进消息区（历史回放：不发声、不滚动、工具块收起）。 */
+function renderHistoryRecords(sessionId) {
+  const box = $('#messages')
+  const keepHeight = box.scrollHeight
+  const keepTop = box.scrollTop
+  box.innerHTML = ''
+  state.toolBlocks.clear()
+  state.anchors = []
+  state.anchorSeq = 0
+  state.streamEl = null
+  state.streamWrap = null
+  state.suppressScroll = true
+  if (state.historyHasMore) {
+    const more = document.createElement('button')
+    more.className = 'nav-more'
+    more.id = 'load-older'
+    more.type = 'button'
+    more.textContent = '⬆ 加载更早的历史（当前从 seq ' + state.historyOldest + ' 开始）'
+    more.addEventListener('click', () => loadOlderHistory(true))
+    box.appendChild(more)
+  }
+  let lastTodos = null
+  for (const record of state.historyRecords) {
+    const ev = record && record.event
+    if (!ev) continue
+    if (ev.type === 'todo/write') lastTodos = ev.data && ev.data.todos
+    if (ev.type === 'assistant/chunk') continue
+    handleSessionEvent(sessionId, ev, true)
+  }
+  state.suppressScroll = false
+  if (lastTodos) renderTodos(lastTodos)
+  if (state.historyHasMore || keepTop > 0) {
+    // 顶栏/翻页后保持原先的阅读位置：按高度差补偿滚动
+    box.scrollTop = Math.max(0, box.scrollHeight - keepHeight + keepTop)
+  } else {
+    scrollMsgs()
+  }
+  if (state.navOpen) rebuildNav()
+}
+
+/** 手动加载更早的历史（导航面板与消息区顶部的按钮都走这里）。 */
+async function loadOlderHistory(userAsked) {
+  if (!state.sessionId || !state.historyHasMore) { toast('已经到会话开头了', 'ok'); return }
+  const sid = state.sessionId
+  const more = $('#load-older')
+  if (more !== null) { more.disabled = true; more.textContent = '⬆ 正在加载更早的历史…' }
+  try {
+    const budget = userAsked ? 12 : 4
+    let pages = 0
+    while (state.historyHasMore && pages < budget && state.historyRecords.length < (userAsked ? 6000 : 1800)) {
+      const added = await pageOlderHistory(sid, 80)
+      if (added === 0) break
+      pages += 1
+    }
+    if (sid !== state.sessionId) return
+    renderHistoryRecords(sid)
+    if (userAsked) toast('已加载 ' + state.historyRecords.length + ' 条记录，最早 seq ' + state.historyOldest, 'ok')
+  } catch (e) {
+    toast('加载更早历史失败: ' + (e && e.message ? e.message : e), 'err')
+  }
 }
 
 async function loadHistory() {
@@ -2896,23 +4792,28 @@ async function loadHistory() {
     const snap = await followSession(sid)
     if (sid !== state.sessionId) return
     state.historyLoaded = true
-    $('#messages').innerHTML = ''
-    state.toolBlocks.clear()
-    state.streamEl = null
-    state.streamWrap = null
-    let lastTodos = null
-    for (const record of snap.records || []) {
-      const ev = record && record.event
-      if (!ev) continue
-      if (ev.type === 'todo/write') lastTodos = ev.data && ev.data.todos
-      if (ev.type === 'assistant/chunk') continue
-      handleSessionEvent(sid, ev, true)
+    resetRate()
+    state.historyRecords = Array.isArray(snap.records) ? snap.records.slice() : []
+    state.historyCursor = typeof snap.cursor === 'number' ? snap.cursor : null
+    state.historyOldest = oldestSeqOf(state.historyRecords)
+    state.historyHasMore = snap.hasMore === true
+    seedRate(snap.projections && snap.projections.values ? snap.projections.values.sessionStats : null)
+    if (snap.projections && snap.projections.values && snap.projections.values.todos) renderTodos(snap.projections.values.todos)
+    /* 先自动往前翻几页：一次提问往往在窗口之外，用户最想看见的就是「冒险者说过什么」。 */
+    try {
+      let pages = 0
+      while (state.historyHasMore && pages < 4 && state.historyRecords.length < 1800) {
+        const added = await pageOlderHistory(sid, 80)
+        if (added === 0) break
+        pages += 1
+      }
+    } catch (e) {
+      termLine('历史翻页失败: ' + (e && e.message ? e.message : e), 't-err')
     }
-    if (lastTodos) renderTodos(lastTodos)
-    if (snap.projections && snap.projections.values && snap.projections.values.todos) {
-      renderTodos(snap.projections.values.todos)
-    }
-    appendSysLine('—— 历史已加载 ——')
+    if (sid !== state.sessionId) return
+    renderHistoryRecords(sid)
+    appendSysLine('—— 历史已加载（' + state.historyRecords.length + ' 条' + (state.historyHasMore ? '，更早的还在宿主里' : '') + '）——')
+    renderRate()
   } catch (e) {
     toast('加载历史失败: ' + e.message, 'err')
   }
@@ -2926,22 +4827,235 @@ async function loadModelsForHud() {
   } catch { /* HUD 显示占位即可 */ }
 }
 
+/* ---------- 附件（图片 / 文件） ----------
+   与官方 UI 走同一套协议：
+     - 图片以 prompt 内联块送出：{ type:'image', mediaType, data(base64), name }
+     - 其他文件先 POST /api/session/uploadFileBinary（application/octet-stream，
+       ?sessionId=&name=）拿到 receiptId，再以 { type:'file', receiptId } 送出。
+   入口三条：输入区的「附件」按钮、Ctrl+V 粘贴截图、把文件拖进输入区。 */
+const ATTACH_IMAGE_MEDIA = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+
+function attachBytesLabel(n) {
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+  return (n / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+/** 读成 base64（去掉 data: 前缀）。 */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('读取文件失败'))
+    reader.onload = () => {
+      const url = String(reader.result || '')
+      const comma = url.indexOf(',')
+      resolve(comma < 0 ? '' : url.slice(comma + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+/** 类型不在白名单里的图片（如 bmp）先用 canvas 转成 PNG；失败返回 null。 */
+function convertImageToPng(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
+    img.onload = () => {
+      let out = null
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth || 1
+        canvas.height = img.naturalHeight || 1
+        canvas.getContext('2d').drawImage(img, 0, 0)
+        const dataUrl = canvas.toDataURL('image/png')
+        out = dataUrl.slice(dataUrl.indexOf(',') + 1)
+      } catch { out = null }
+      URL.revokeObjectURL(url)
+      resolve(out)
+    }
+    img.src = url
+  })
+}
+
+function attachmentMeta(item) {
+  if (item.status === 'reading') return '读取中…'
+  if (item.status === 'uploading') return '上传中…'
+  if (item.status === 'error') return item.error || '失败'
+  return attachBytesLabel(item.bytes) + (item.kind === 'image' ? ' · 图片' : ' · 文件')
+}
+
+/** 画一条附件条目（草稿栏与消息里共用）。 */
+function attachmentNode(item, onRemove) {
+  const el = document.createElement('div')
+  el.className = 'attach-item' + (item.kind === 'image' ? ' a-image' : '')
+    + (item.status === 'error' ? ' a-error' : '')
+    + (item.status === 'uploading' || item.status === 'reading' ? ' a-uploading' : '')
+  el.title = item.name + '（' + attachmentMeta(item) + '）'
+  if (item.kind === 'image' && item.previewUrl) {
+    const img = document.createElement('img')
+    img.src = item.previewUrl
+    img.alt = item.name
+    el.appendChild(img)
+  } else {
+    const body = document.createElement('div')
+    body.className = 'a-body'
+    const name = document.createElement('div')
+    name.className = 'a-name'
+    name.textContent = item.name
+    const meta = document.createElement('div')
+    meta.className = 'a-meta'
+    meta.textContent = attachmentMeta(item)
+    body.appendChild(name); body.appendChild(meta)
+    el.appendChild(body)
+  }
+  if (onRemove) {
+    const del = document.createElement('button')
+    del.className = 'attach-del'
+    del.type = 'button'
+    del.textContent = '×'
+    del.title = '移除附件'
+    del.addEventListener('click', (ev) => { ev.stopPropagation(); onRemove(item) })
+    el.appendChild(del)
+  }
+  return el
+}
+
+function renderAttachRail() {
+  const rail = $('#attach-rail')
+  rail.innerHTML = ''
+  rail.hidden = state.attachments.length === 0
+  for (const item of state.attachments) rail.appendChild(attachmentNode(item, removeAttachment))
+}
+
+function removeAttachment(item) {
+  const i = state.attachments.indexOf(item)
+  if (i < 0) return
+  state.attachments.splice(i, 1)
+  if (item.previewUrl && !item.keepPreview) URL.revokeObjectURL(item.previewUrl)
+  renderAttachRail()
+}
+
+/** 非图片文件：上传拿 receiptId。失败只标记该条，不影响其他附件。 */
+async function uploadAttachment(item) {
+  item.status = 'uploading'
+  item.error = null
+  renderAttachRail()
+  try {
+    const query = new URLSearchParams({ sessionId: state.sessionId, name: item.name })
+    const res = await fetch('/api/session/uploadFileBinary?' + query.toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: item.file,
+    })
+    let body = null
+    try { body = await res.json() } catch { body = null }
+    if (!body || body.ok !== true) {
+      const detail = body && body.error && body.error.message ? body.error.message : 'HTTP ' + res.status
+      throw new Error(detail)
+    }
+    item.receiptId = body.value.receiptId
+    if (body.value.file && Number.isFinite(body.value.file.bytes)) item.bytes = body.value.file.bytes
+    item.status = 'ready'
+  } catch (error) {
+    item.status = 'error'
+    item.error = String((error && error.message) || error)
+  }
+  renderAttachRail()
+}
+
+/** 文件夹在拖放里表现为 0 字节、无类型的条目；这里只提示走工作空间，不当文件上传。 */
+function looksLikeFolder(file) {
+  return file.size === 0 && (file.type === '' || file.type === 'application/x-directory')
+    && !/\.[a-z0-9]{1,8}$/i.test(file.name || '')
+}
+
+/** 接收一批 File（选择、粘贴、拖放共用）。 */
+async function addAttachments(fileList) {
+  const files = [...(fileList || [])]
+  if (files.length === 0) return
+  if (!state.sessionId) { toast('先从标题屏开启一个会话，再添加附件', 'err'); return }
+  for (const file of files) {
+    if (looksLikeFolder(file)) {
+      toast('「' + file.name + '」看起来是文件夹：请用「工作空间」把它加进工作区', 'err')
+      continue
+    }
+    const item = {
+      id: crypto.randomUUID(),
+      kind: 'file',
+      name: file.name || '未命名文件',
+      bytes: file.size,
+      status: 'ready',
+      error: null,
+      file,
+      previewUrl: null,
+    }
+    if (file.type.startsWith('image/')) {
+      item.kind = 'image'
+      item.mediaType = ATTACH_IMAGE_MEDIA.includes(file.type) ? file.type : 'image/png'
+      item.previewUrl = URL.createObjectURL(file)
+      item.status = 'reading'
+      state.attachments.push(item)
+      renderAttachRail()
+      if (item.mediaType === file.type) {
+        try {
+          item.data = await fileToBase64(file)
+          item.status = 'ready'
+        } catch (error) {
+          item.status = 'error'
+          item.error = String((error && error.message) || error)
+        }
+      } else {
+        const png = await convertImageToPng(file)
+        if (png === null) { item.status = 'error'; item.error = '不支持的图片格式' }
+        else { item.data = png; item.status = 'ready' }
+      }
+      renderAttachRail()
+      continue
+    }
+    state.attachments.push(item)
+    await uploadAttachment(item)
+  }
+}
+
 /* ---------- 发送 ---------- */
 async function sendPrompt() {
   const input = $('#chat-input')
   const text = input.value.trim()
-  if (!text) return
   if (!state.sessionId) { toast('先从标题屏开启一个会话', 'err'); return }
+  const busy = state.attachments.filter(a => a.status === 'reading' || a.status === 'uploading')
+  if (busy.length > 0) { toast('还有 ' + busy.length + ' 个附件没准备好，稍等再发送', 'err'); return }
+  const failed = state.attachments.filter(a => a.status === 'error')
+  if (failed.length > 0) { toast('附件「' + failed[0].name + '」不可用，请移除后重试', 'err'); return }
+  const ready = state.attachments.slice()
+  if (!text && ready.length === 0) return
+  const content = []
+  if (text) content.push({ type: 'text', text })
+  for (const a of ready) {
+    if (a.kind === 'image') content.push({ type: 'image', mediaType: a.mediaType, data: a.data, name: a.name })
+    else content.push({ type: 'file', receiptId: a.receiptId })
+  }
   input.value = ''
-  appendUserMsg(text, true)
+  state.attachments = []
+  renderAttachRail()
+  /* 回执气泡用内联 data URL 显示缩略图，草稿用的 object URL 随即回收，避免长期占内存。 */
+  const echoItems = ready.map(a => (a.kind === 'image' && a.data
+    ? { ...a, previewUrl: 'data:' + a.mediaType + ';base64,' + a.data }
+    : a))
+  for (const a of ready) {
+    if (a.previewUrl && a.previewUrl.startsWith('blob:')) URL.revokeObjectURL(a.previewUrl)
+  }
+  appendUserMsg(text, true, echoItems)
   state.pendingUserText = text
+  state.pendingAttachmentsOnly = text === '' && ready.length > 0
   showThinking()
   setRunning(true)
   try {
     const v = await rpc('session.prompt', {
       sessionId: state.sessionId,
       mode: 'queue',
-      content: [{ type: 'text', text }],
+      content,
       clientTimeZone: TZ,
     })
     if (v.command && v.command.text) toast(v.command.text)
@@ -2977,6 +5091,7 @@ document.querySelectorAll('.menu-item').forEach(btn => {
     const act = btn.getAttribute('data-action')
     if (act === 'new') newSession()
     else if (act === 'continue') openContinueList()
+    else if (act === 'plugins') openPluginHub()
     else if (act === 'settings') openSettings()
     else if (act === 'deskpet') openDeskPet()
   })
@@ -2993,17 +5108,76 @@ $('#btn-bgm').addEventListener('click', () => {
   if (!bgmAudio) { toast('尚未上传背景音乐，请在「设置」中添加', 'err'); return }
   setBgmOn(!state.bgmOn)
 })
+$('#btn-plugins').addEventListener('click', () => openPluginHub())
 $('#btn-settings2').addEventListener('click', openSettings)
+
+/* 聊天记录导航：开关、筛选、跳顶/跳底、滚动高亮，以及 Markdown 代码块的复制按钮。 */
+$('#btn-nav').addEventListener('click', () => toggleNav())
+$('#nav-top').addEventListener('click', () => { const m = $('#messages'); m.scrollTop = 0 })
+$('#nav-bottom').addEventListener('click', () => jumpToAnchor(state.anchors.length > 0 ? state.anchors[state.anchors.length - 1].id : ''))
+$('#nav-filter').addEventListener('input', () => rebuildNav())
+$('#messages').addEventListener('scroll', () => {
+  if (state.navScrollTimer) return
+  state.navScrollTimer = setTimeout(() => { state.navScrollTimer = null; syncNavOnScroll() }, 160)
+})
+$('#messages').addEventListener('click', (ev) => {
+  const btn = ev.target && ev.target.classList && ev.target.classList.contains('md-copy') ? ev.target : null
+  if (btn === null) return
+  const pre = btn.closest('pre')
+  const code = pre === null ? null : pre.querySelector('code')
+  copyText(code === null ? '' : code.textContent)
+})
+/* 实时速率：跑起来之后每 0.7s 刷一次（流式时不用等 step 结束）。 */
+setInterval(() => { if (state.running) renderRate() }, 700)
 $('#btn-preset').addEventListener('click', openPresetPicker)
 $('#btn-workspace').addEventListener('click', openWorkspace)
 $('#btn-perm').addEventListener('click', openPermission)
 $('#btn-model').addEventListener('click', openModelPicker)
 $('#btn-cancel').addEventListener('click', cancelTurn)
+
+/* 附件：按钮 / 粘贴 / 拖放三条入口都汇到 addAttachments()。 */
+$('#btn-attach').addEventListener('click', () => {
+  if (!state.sessionId) { toast('先从标题屏开启一个会话，再添加附件', 'err'); return }
+  $('#attach-input').click()
+})
+$('#attach-input').addEventListener('change', (ev) => {
+  const files = ev.target.files
+  ev.target.value = ''
+  addAttachments(files).catch((error) => { toast('添加附件失败: ' + String((error && error.message) || error), 'err') })
+})
+$('#chat-input').addEventListener('paste', (ev) => {
+  const items = ev.clipboardData ? [...ev.clipboardData.items] : []
+  const files = items.filter(it => it.kind === 'file').map(it => it.getAsFile()).filter(Boolean)
+  if (files.length === 0) return
+  ev.preventDefault()
+  addAttachments(files).catch((error) => { toast('粘贴附件失败: ' + String((error && error.message) || error), 'err') })
+})
+{
+  const zone = document.querySelector('.input-area')
+  zone.addEventListener('dragover', (ev) => {
+    ev.preventDefault()
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'
+    zone.classList.add('drag-over')
+  })
+  zone.addEventListener('dragleave', (ev) => {
+    if (ev.target === zone) zone.classList.remove('drag-over')
+  })
+  zone.addEventListener('drop', (ev) => {
+    ev.preventDefault()
+    zone.classList.remove('drag-over')
+    const files = ev.dataTransfer ? ev.dataTransfer.files : null
+    addAttachments(files).catch((error) => { toast('拖入附件失败: ' + String((error && error.message) || error), 'err') })
+  })
+}
 $('#btn-send').addEventListener('click', sendPrompt)
 $('#chat-input').addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendPrompt() }
 })
 $('#modal-root').addEventListener('click', (ev) => { if (ev.target === $('#modal-root')) closeModal() })
+/* Esc 也能关弹窗：桌面壳里鼠标点击一旦被拖拽区吃掉，键盘是唯一的退路。 */
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !$('#modal-root').hidden) { ev.preventDefault(); closeModal() }
+})
 $('#btn-cancel').disabled = true
 
 /* ---------- 启动 ---------- */
@@ -3014,8 +5188,9 @@ applyNpcAvatar()
 applyNpcPersona(state.npcPersona)
 PETS.forEach(p => setPetVisible(p.id, state.pets[p.id]))
 $('#btn-bgm').textContent = state.bgmOn ? '音乐:开' : '音乐:关'
+setupDesktopShell()
 connectWs()
-refreshKeyStatus()
+loadAccountWithRetry().then(() => { refreshKeyStatus() })
 </script>
   </body>
 </html>

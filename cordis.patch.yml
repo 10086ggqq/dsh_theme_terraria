@@ -1,13 +1,26 @@
-# dsh-theme-terraria bundle patch: serve the Terraria theme frontend instead
-# of the official React dist on the Web surface.
+# dsh-theme-terraria bundle patch.
 #
-# The official web-runtime row (inserted by the dsh-web-app bundle layer)
-# serves the official frontend and provides the `webRuntime` service the
-# connection row injects. Disabling it here and inserting an identical row
-# whose plugin is dsh-theme-terraria keeps the whole Web runtime — dist
-# serving, the /api trust fence, the web-surface prompt section, DSH_WEB_URL,
-# the URL line — while the served dist becomes this package's web/ directory.
-# Remove this bundle from the profile to fall back to the official frontend.
+# Two mechanisms live behind this one row:
+#
+# 1. Browser path — the official web-runtime row (inserted by the dsh-web-app
+#    bundle layer) is disabled and replaced by an identical row whose plugin is
+#    dsh-theme-terraria. The theme delegates to the official web-app plugin
+#    with one substitution: the frontend dist resolver points at this package's
+#    web/ directory, so opening the Host URL in a browser gets the full
+#    self-contained Terraria frontend. Everything the web-runtime row owns
+#    (dist serving, the /api trust fence, the web-surface prompt section,
+#    DSH_WEB_URL, the URL line, the browser handoff) keeps working unchanged.
+#
+# 2. Desktop app window — that window never requests the Host's dist: it loads
+#    dsh-app://app/, which the Electron main process maps to the frontend
+#    bundled inside the application. There the theme works through the Host's
+#    index-injection table instead (injection rows: a pixel stylesheet plus the
+#    behaviour script served from /terraria/*). The Desktop Host sends
+#    collectIndexInjections() to the shell, which applies every row, so the
+#    same skin also applies in the browser.
+#
+# Remove this bundle from the profile to fall back to the stock frontend
+# everywhere.
 
 - id: web-runtime
   disabled: true

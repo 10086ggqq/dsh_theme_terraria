@@ -78,6 +78,37 @@ dsh plugin --profile web add /path/to/dsh_theme_terraria
 
 > When running dsh from source inside the deepseek-harness repository, prefix the commands with `pnpm` (e.g. `pnpm dsh plugin --profile web add ...`, `pnpm dsh web`).
 
+### How it applies inside the Desktop (Electron) app
+
+The Desktop window has two hard constraints: it loads `dsh-app://app/`, and that protocol maps `/`,
+`/index.html`, `/assets/*`, `/favicon.svg` and `/manifest.webmanifest` to the frontend **bundled inside
+the application** — the dist served by the Host is never requested there. Only other paths are forwarded
+to the Host together with its cookie.
+
+So the plugin takes two routes:
+
+1. **Full takeover (default)**: the injection layer preflights `/terraria/theme.html` (which serves
+   `web/index.html`) and then navigates the window there — the Desktop window runs the **very same UI**
+   as the web version (title screen, Guide dialog, character creation, quest HUD, 8-bit sounds,
+   wallpapers, desk pets). `/api/*` keeps flowing through the Desktop shell with the Host cookie, and
+   the WebSocket connects to the Host origin taken from `__DSH_TRANSPORT__.streamBaseUrl`.
+2. **Fallback skin**: when the theme page is unavailable (missing route / failed preflight) or the
+   takeover is switched off, the official UI gets an injected pixel skin (`skin/terraria.css`
+   overriding the official `--dsw-*` tokens and generic element styles).
+
+Desktop-only adaptations: native caption colours (the preload reads the page's `--dsw-*` tokens), a
+40 px title-bar reservation, and `-webkit-app-region: drag` on the top bar and title screen — with
+every interactive element marked `no-drag`, because app-region is a **hit test, not a stacking
+order**. Modal overlays (`#modal-root`) are `no-drag` too, and while a modal is open the page sets
+`data-terraria-modal` to drop the drag regions underneath it; otherwise the full-window title-screen
+drag area swallows every click on the overlay (the "关闭" buttons of *Continue* / *Desk Pet* looked
+dead). <kbd>Esc</kbd> closes a modal as well.
+
+- **Quit the application completely and relaunch it**: the injection rows are a one-shot snapshot taken
+  when the Host starts, so reloading the window or reloading the plugin will not pick up new rows.
+- Way out: "切回官方界面" on the theme title screen, or <kbd>Alt</kbd>+<kbd>O</kbd>. On the Host side,
+  `DSH_TERRARIA_STANDALONE=0` disables the takeover and `DSH_TERRARIA_SKIN=0` disables the fallback skin.
+
 ### Configure the API Key and Start Chatting
 
 1. Open http://127.0.0.1:3080/ and click "新的会话" (New Session);
@@ -91,6 +122,8 @@ dsh plugin --profile web add /path/to/dsh_theme_terraria
 
 | Pitfall | Symptom | Fix |
 |---|---|---|
+| Desktop app window does not show the theme | Plugin says "running" but the window stays official | The Desktop window never requests the Host dist; since 0.2.0 the injection layer takes the window over to the theme page. Injection rows are a **one-shot snapshot at Host start**, so quit the app completely and relaunch (reloading the window or the plugin is not enough). If the takeover is unavailable, it falls back to "official UI + pixel skin" |
+| Theme page loads but never connects | Status keeps reconnecting | Use "切回官方界面" on the theme title screen, or <kbd>Alt</kbd>+<kbd>O</kbd>, to get a working UI back, then send the console error |
 | Browser caches old UI | Page still shows the old version after a plugin update | Hard refresh with `Ctrl+F5`, or append `?v=2` to the URL |
 | `dsh plugin add` fails | `pnpm not found on PATH` or a pnpm error | `dsh plugin` forwards to pnpm: install pnpm and reopen the terminal; for git installs, follow the printed hint and add the key under `allowBuilds` in the profile's `pnpm-workspace.yaml`, then re-run |
 | Key save fails | Toast reports "保存失败" | Make sure `dsh web` was started from your own terminal; sandboxed environments may block host-directory writes |
@@ -118,13 +151,20 @@ The visual foundation is three layers:
 
 ### Title Screen
 
-A faithful recreation of the game's main menu: logo, four pixel menu items (New Session / Continue / Settings / Desk Pet), and the big tree silhouette over the forest background.
+A faithful recreation of the game's main menu: logo, five pixel menu items (New Session / Continue / Plugin Manager / Settings / Desk Pet), and the big tree silhouette over the forest background.
 
 ### Main Chat Interface (Three-Column Layout)
 
-- **Top bar**: back button, session name (mode@workspace), connection lamp ("已连接到向导世界" — connected to the Guide's world), Chat/Terminal tab switch, sound toggle, music toggle, settings entry;
-- **Chat column**: message stream (Adventurer = user, Guide = assistant, collapsible tool-call blocks) plus the bottom NPC dialog box — Guide portrait (`xiangdao.png`) and heart emblem (`heart.png`) on the left, input box and six pixel buttons on the right: **Mode Select, Workspace, Permissions, Model Select, Stop, Send**;
-- **HUD sidebar**: current model (name + description), API key status lamp, quest list (live todo projection), Guide tips.
+- **Top bar**: back button, session name (the current **workspace name**, e.g. `dsh_theme_terraria`; sessions without a workspace fall back to the mode name), connection lamp ("已连接到向导世界" — connected to the Guide's world), Chat/Terminal tab switch, sound toggle, music toggle, plugin manager, settings entry. The model name lives in the HUD's "当前模型" only — the top bar no longer repeats it as a badge;
+- **Chat column**: message stream (Adventurer = user, Guide = assistant, collapsible tool-call blocks) plus the bottom NPC dialog box — Guide portrait (`xiangdao.png`) and heart emblem (`heart.png`) on the left, input box and seven pixel buttons on the right: **Attach, Mode Select, Workspace, Permissions, Model Select, Stop, Send**. **Intermediate steps that produced neither text nor reasoning (a step that only ran tools) no longer render at all** — they used to leave a bubble containing nothing but a token line; now the usage only feeds the HUD panel. Replies no longer carry a `tokens:` line underneath either: **no token copy appears in the message stream anymore**, token stats live in the HUD's rate panel only;
+- **HUD sidebar**: current model (name + description), API key status lamp (the login role is reported here too — status only, with **no sign-out entry**; that button lives in the settings modal's login-role row), quest list (live todo projection), Guide tips with a **token output rate** readout (live tok/s + this turn's tokens + session average + a mini bar chart) — the one and only place token usage is shown (every step's `outputTokens` accumulates here).
+
+### Chat History: Paging, Anchor Navigation, Markdown
+
+- **History paging (your own prompts survive "Continue")**: the `session/follow` snapshot is only a window (measured ~300 records, sometimes just the latest prompt), so `loadHistory()` keeps paging backwards with `session/page` (`throughSeq` inclusive / `beforeSeq` exclusive) — four pages automatically, and a "⬆ 加载更早的历史" button (up to 12 more pages / 6000 records) at the top of the stream and in the navigation panel. Records are re-rendered in chronological order and the scroll position is preserved by height compensation;
+- **Anchor navigation**: "≡ 导航" in the top-right corner of the chat opens a panel listing the **results** as anchors (Adventurer = each of your prompts, Guide = replies that actually have text, with a preview); clicking one scrolls to it and flashes a gold border. It has a text filter, jump-to-oldest/newest buttons, and auto-highlights the message you are currently reading while scrolling;
+- **Results only**: intermediate steps that carried just a thinking block or a tokens line (no reply text) are **not** listed in the history panel, so the list never fills up with un-jumpable noise;
+- **Markdown rendering**: assistant replies render as Markdown (headings, bold/italic, inline code, fenced code blocks with a copy button, quotes, ordered/unordered/task lists, tables, rules, links, images) and keep rendering live while streaming. Everything is HTML-escaped *before* parsing, so model output can never inject markup; user messages stay plain `pre-wrap` text.
 
 ![Mode Select Modal](screenshots/mode-select.png)
 
@@ -143,26 +183,53 @@ Clicking "模式选择" opens a **character-creation**-style modal — the most 
 
 The settings modal has four sections:
 
+- **Login role** (row 0, `#set-role` / `#set-role-detail`): which identity is running — "DeepSeek 账号 · 已登录 · <name or contact>" or "API 密钥 · 未登录 DeepSeek 账号，用密钥直连", plus a line noting that account credentials are kept by the host and used automatically (no API key needed). The snapshot comes from the same-origin `GET /terraria/account`. **While signed in with an account this row also carries a "退出登录" (sign out) button** (`#set-signout`, a danger-styled small button): it first asks for confirmation (querying `account/hasRunningAccountTasks` so the copy can warn that running tasks will be interrupted), then calls the host's `account/signOut` with the client identity `{version, locale, timezoneOffsetSeconds}` — the same endpoint the official frontend uses. The host deletes the local account grant and revokes it through Platform in the background; **API keys are untouched**. Afterwards the page polls `/terraria/account` until the role is no longer an account and refreshes the role row and the HUD lamp. The button is hidden in API-key mode (there is no login to end), and it lives **only in the settings modal — the chat page (HUD / top bar) never shows it**;
 - **API key**: an orange "DeepSeek API 密钥" heading with the config status on the right; the password input sits on the left (start position and height unchanged, width adapts), with the gold "保存密钥" (Save Key) button and the tool-approval mode switch (auto-allow / manual confirm) to its right on the same row, all bottom-aligned; stored on the host via `credentials.set`; on narrow screens the buttons wrap below instead of covering the input;
 - **Wallpaper**: dashed drop zone "拖拽图片/视频到此处，或点击选择" — supports both drag-and-drop and click upload; images are auto-compressed to 1920px JPEG for localStorage, GIFs keep their animation as-is, and **videos (MP4/WebM, ≤512 MB) are stored in IndexedDB as fullscreen live wallpapers** (muted, looping, behind everything); "恢复默认" restores the forest in one click;
 - **Background music**: dashed drop zone "拖拽音频到此处，或点击选择" — drag or click to upload any audio file (MP3/WAV/OGG etc., ≤64 MB), stored in IndexedDB and looped as BGM; comes with a play/pause button, a volume slider, and "移除音乐" (remove); the top-bar "音乐:开/关" (music on/off) toggles it anytime;
-- **Plugins**: opens the plugin manager.
+- **Interface**: reload the UI (the desktop shell has no refresh shortcut) and open the plugin manager.
 
 ![Settings Modal](screenshots/settings.png)
 
-### Plugin Manager
+### Plugin Manager (search / inspect / install / enable / remove)
 
-Reads the current difficulty preset's `cordis.yml` and parses every mounted dsh plugin:
+The top bar's "插件管理" (also on the title screen) opens the plugin dialog, talking to the host's `pluginManager` service:
 
-- Each row shows the plugin name (×N when mounted repeatedly) plus a Chinese usage note (e.g. `dsh-persona 向导人格与系统提示词`);
-- Plugins with `disabled: true` are grayed out and tagged "已停用";
-- A "查看原始文件" button expands the raw cordis.yml for comparison.
+- **Search**: asks the public npm registry directly (`registry.npmjs.org/-/v1/search`, CORS-enabled) and ranks dsh-related hits first; an empty query searches `keywords:dsh-plugin`. When search is unavailable it tells you to paste a package name instead;
+- **Local / Git source install** (for everything search cannot find): a spec input with "选择文件夹…" (the desktop shell's native picker returns the host's absolute path), "选择 .tgz…" (`__DSH_HOST_PATHS__.pathFor`), and drag-and-drop of a folder onto the row. Every host spec form is accepted — an absolute path (`D:\code\my-plugin`, must contain package.json), a `*.tgz` (local or URL), a git repo (`github:you/repo`, `https://github.com/you/repo`, `git+https://…`, `git@host:path`) and a registry name (optionally with `@version`). **Local paths must be absolute**: `file:///D:/…` and relative paths are refused by the host (measured: `not-a-package: the path does not exist` / `invalid-spec: a local path must be absolute`);
+- **Inspect**: `pluginManager/inspect` resolves a spec (package name, npm alias, git URL, local path, tarball) and reports whether it is a bundle, plus version and description; refusals show the `problem` and the raw reason (e.g. `not-found` + registry text, or `already-installed`);
+- **Install**: `pluginManager/installBundle` (with a client-minted `requestId` and `enabled: true`); the outcome is reported by `application` (`applied / restart-required / failed`) with error code, diagnostic and the tail of the pnpm output. The log area also collects the host's `plugin-manager/install-log` events;
+- **Installed**: `pluginManager/listBundles` lists every bundle (name @ version · title · description) with **enable / disable** (`setBundleEnabled`) and, when removable, **remove** (`removeBundle`); built-in bundles are marked "内置（不可卸载）" with the toggle disabled, and multi-plugin bundles list their plugins;
+- **Registry**: shows what `pluginManager/registries` resolved (here `registry.npmjs.org` with `registry.npmmirror.com` as fallback);
+- **Current preset inventory**: the old settings-page cordis.yml inventory moved here, with the raw preset file available for comparison.
+
+#### Why plugins that live on GitHub do not show up in the search
+
+The search queries the **npm registry index**, not GitHub:
+
+1. A repo that was never **published to npm** has no registry metadata at all, so it cannot be found (the host's `inspect` answers `not-found`);
+2. Packages that are published but have no `dsh` keyword in their name/description rank far down, because search is relevance-ordered rather than a precise filter;
+3. Packages that live in a **private registry / internal mirror** are invisible to the public one (this machine resolves `registry.npmjs.org` with `registry.npmmirror.com` as fallback);
+4. **Scoped packages** (`@you/pkg`) usually need their exact name.
+
+Installing is unaffected: paste the repository into "本地 / Git 来源安装"
+(`https://github.com/you/repo`, `github:you/repo` — `inspect` reports `{status:"accepted",kind:"git",host:"github.com"}`),
+use an absolute path for a local checkout, or point at a `*.tgz`; pnpm clones, unpacks and installs the dependencies itself.
 
 ![Plugin Manager](screenshots/plugin-manager.png)
 
+### Continue-Session Modal: Workspaces as Parents, Sessions as Children
+
+"继续会话" on the title screen lays the sessions out as a **folder tree** (it aligns `session/list` with `workspace/follow`):
+
+- **Parent node = workspace**: the header row shows the workspace name (e.g. `dsh_theme_terraria`) + full path + session count, and clicking it collapses/expands the node (`▾ / ▸`);
+- **Child node = "第 x 个对话"**: children are ordered by most recent activity, so #1 is the newest; each row carries the session title, timestamp, a `运行中` (running) tag and the working directory;
+- **Archive**: every session row ends with an "归档" button calling `workspace/archiveSession` (a running session has its activity stopped as well). Archived sessions leave the tree and move into a collapsed **"已归档"** parent at the bottom, where each row offers "取消归档" (`workspace/unarchiveSession`) to put it back;
+- Ownership comes from the workspace's `sessionIds`, with a `cwd` match as fallback; sessions covered by neither are grouped by their `cwd` tail, and those without a `cwd` land under "未归入工作空间".
+
 ### Workspace Modal
 
-- Lists all registered workspaces (title, full path, session count); **click any row to start a new session in that directory** (session name shows like "旅途@assets");
+- Lists all registered workspaces (title, full path, session count); **click any row to start a new session in that directory** (the session name then shows that workspace name, e.g. "assets");
 - "添加本地文件夹" (Add local folder) supports three methods: **Select Folder…** (system dialog), **drag-and-drop** (auto-parses file:// / Windows paths), or **manual input** of the full path;
 - Because browsers only hand out the folder name from the picker, the theme smart-matches registered directories of the same name and offers a one-click "使用 E:\full\path" backfill.
 
@@ -216,7 +283,7 @@ A consistent **adventure narrative** is woven through the interaction details fo
 
 1. **Opening line**: every new session begins with — "欢迎来到泰拉瑞亚！我是你的向导。" (Welcome to Terraria! I am your Guide.) — and follows a renamed character's new name.
 2. **Your name is "Adventurer"**: user messages are never signed "Me" or "User" — always 冒险者, the person standing across from the Guide.
-3. **HUD Guide tip** (a quiet hint at the mechanics): "危险操作会弹出审批石板；红心是对话的印记，金币是账单。" — hearts = the emblem on dialog bubbles, coins/the bill = the token-usage stats attached to every reply.
+3. **HUD Guide tip** (a quiet hint at the mechanics): "危险操作会弹出审批石板；红心是对话的印记，金币是账单。" — hearts = the emblem on dialog bubbles, coins/the bill = the token-usage stats, which now live in the HUD's Guide-tip panel instead of a per-reply line.
 4. **The connection's worldview**: a live socket reads "已连接到向导世界" (connected to the Guide's world); a dropped one reads "连接已断开，重连中…" — WebSocket reconnection told as a world bond.
 5. **The difficulty lexicon**: there is no "standard/code/minimal" in mode select — only Journey, Softcore, Mediumcore, Hardcore. Pick Softcore and the side panel quotes the game verbatim: "软核人物死亡时会掉落金钱。" (Softcore characters drop coins on death.) — while it actually switches the Code Mode SDK preset.
 6. **"旅程被中断"**: when you manually stop a generation, the system line doesn't say "cancelled" — it says "the journey was interrupted".

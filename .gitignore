@@ -1,0 +1,11 @@
+# Dependencies / package manager
+node_modules/
+.pnpm-store/
+
+# Local dev & reconnaissance artifacts
+.recon/
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
