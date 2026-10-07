@@ -226,7 +226,7 @@ html[data-terraria-desktop] .main-top .main-title {
 }
 .msg.bot .msg-name { font-size: 12px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 var(--black); margin-bottom: 6px; }
 /* 消息/思考/工具输出文本可选中复制（body 全局 user-select:none 的例外区） */
-.msg-text, .tool-body, .msg-reasoning .r-body { user-select: text; }
+.msg-text, .tool-body { user-select: text; }
 .msg-name { display: flex; align-items: center; gap: 8px; }
 /* 消息复制按钮：随名牌行右置，悬停金色高亮 */
 .msg-copy {
@@ -235,25 +235,30 @@ html[data-terraria-desktop] .main-top .main-title {
 }
 .msg-copy:hover { color: var(--gold); border-color: var(--gold); }
 .msg.bot .msg-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55; font-size: 20px; color: #c8c8d8; text-shadow: 2px 2px 0 #1a1a3a; }
-.msg-reasoning {
-  margin-bottom: 8px;
-  border: 2px solid #2a2a5a;
-  background: #3a3a6a;
-  padding: 4px 8px;
-}
-.msg-reasoning summary { font-size: 12px; color: #9a9aba; cursor: pointer; user-select: none; }
-.msg-reasoning .r-body { font-size: 13px; color: #8a8aaa; white-space: pre-wrap; word-break: break-word; line-height: 1.5; margin-top: 4px; max-height: 200px; overflow-y: auto; }
-/* 思考过程：一行小字（不占对话块），点一下才展开原文 */
-.reason-line { align-self: flex-start; max-width: 94%; margin: 1px 0 3px 4px; }
-.reason-line .r-head {
-  display: inline-flex; align-items: center; gap: 5px; padding: 1px 2px;
-  font-size: 11px; line-height: 16px; color: #8585a8; background: none; border: 0;
-  cursor: pointer; user-select: none; text-align: left;
-}
-.reason-line .r-head:hover { color: #b9b9d8; }
-.reason-line .r-caret { font-size: 9px; opacity: 0.8; }
-.reason-line .r-text { font-size: 11.5px; line-height: 1.45; color: #7d7d9d; white-space: pre-wrap; word-break: break-word; margin: 2px 0 4px 3px; max-height: 180px; overflow-y: auto; user-select: text; }
 /* 每条回复底下那行 tokens 统计已去掉：用量只在 HUD 的速率面板里看（.msg-usage 不再使用） */
+/* ---------- 回合过程折叠 ----------
+   一个回合里除了「最后一步的正文」，其余都是过程：思考、工具调用、中间步骤正文。
+   它们全收进 .turn-process（运行中展开、回合结束自动收起），聊天流里于是只剩
+   你的消息 + 结果气泡 + 每个回合一行过程摘要。 */
+.turn-process { align-self: stretch; margin: 2px 0 4px 4px; max-width: 96%; }
+.turn-process .tp-head {
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px;
+  font-family: inherit; font-size: 11px; line-height: 17px; color: #8585a8;
+  background: none; border: 0; cursor: pointer; user-select: none; text-align: left;
+}
+.turn-process .tp-head:hover { color: #b9b9d8; }
+.turn-process .tp-caret { font-size: 9px; opacity: 0.8; }
+.turn-process .tp-body { margin: 1px 0 2px 8px; padding-left: 6px; border-left: 1px solid #2f2f55; }
+.turn-process.collapsed .tp-body { display: none; }
+.turn-process.collapsed .tp-head { opacity: 0.9; }
+/* 过程里的一行：中间步骤正文 / 思考原文（都可选中复制） */
+.turn-process .tp-row { font-size: 11.5px; line-height: 1.5; color: #7d7d9d; user-select: text; }
+.turn-process .tp-row .md p { margin: 2px 0; }
+.turn-process .tp-row.tp-reason { max-height: 180px; overflow-y: auto; }
+.turn-process .tp-row.tp-text { max-height: 140px; overflow-y: auto; }
+.turn-process .tp-tag { display: inline-block; margin-right: 4px; color: #6f6f93; }
+/* 收进过程里的工具块：跟着过程一起收起，不再占聊天流 */
+.turn-process .tool-block { margin: 2px 0; }
 .sys-line { align-self: center; font-size: 12px; color: var(--amber); text-shadow: 1px 1px 0 var(--black); padding: 2px 8px; text-align: center; }
 .sys-line.err { color: #ff6a6a; }
 /* 运行中的等待指示：同样只占一行小字，不再是一块对话区 */
@@ -974,6 +979,13 @@ const state = {
   streamPaintedAt: 0,
   streamPaintTimer: null,
   navScrollTimer: null,
+  /* 回合过程折叠：思考 / 工具调用 / 中间步骤正文都收进这一块，回合结束自动收起。
+     group/body/summary 是懒创建的 DOM；pending 是「上一步的正文气泡」，下一步开始时
+     降级成过程里的一行；只有本回合最后一步的正文留在聊天流里当结果。 */
+  turn: {
+    group: null, body: null, summary: null, caret: null,
+    pending: null, rows: 0, tools: 0, textRows: 0, reasonChars: 0, startedAt: 0,
+  },
   pluginLog: null,   // 插件安装日志的写入器（弹窗开启时才有）
 }
 // 背景音乐音量：localStorage 存 0~1 小数；缺失或非法时回 0.5（'0' 是合法值，需区别于 null）。
@@ -1537,38 +1549,6 @@ function blocksReasoning(content) {
   if (!Array.isArray(content)) return ''
   return content.filter(b => b && b.type === 'reasoning').map(b => b.text).join('\n')
 }
-/**
- * 思考过程：一行小字（「已思考 · N 字」），点一下在原位展开原文。
- *
- * 说话人、字数都在这一行里，不再像之前那样先占一块 `details` 对话区，
- * 也不会把正文挤到屏幕下面。
- * @param {string} reasoning - 思考原文（可能多段，已用换行拼接）。
- * @returns {HTMLElement} 行元素。
- */
-function buildReasonLine(reasoning) {
-  const wrap = document.createElement('div')
-  wrap.className = 'reason-line'
-  const head = document.createElement('button')
-  head.type = 'button'
-  head.className = 'r-head'
-  const caret = document.createElement('span')
-  caret.className = 'r-caret'
-  caret.textContent = '▶'
-  const label = document.createElement('span')
-  label.className = 'r-label'
-  label.textContent = '已思考 · ' + reasoning.length + ' 字'
-  head.appendChild(caret); head.appendChild(label)
-  const text = document.createElement('div')
-  text.className = 'r-text'
-  text.textContent = reasoning
-  text.hidden = true
-  head.addEventListener('click', () => {
-    text.hidden = !text.hidden
-    caret.textContent = text.hidden ? '▶' : '▼'
-  })
-  wrap.appendChild(head); wrap.appendChild(text)
-  return wrap
-}
 /** 该消息是否带了图片 / 文件块（持久事件里是引用，不带字节）。 */
 function hasAttachments(content) {
   return Array.isArray(content) && content.some(b => b && (b.type === 'image' || b.type === 'file'))
@@ -1766,6 +1746,19 @@ function syncBotAnchor(wrap, text) {
     return
   }
   existing.text = body
+  if (state.navOpen) scheduleNavRebuild()
+}
+
+/**
+ * 撤掉某个元素的锚点：中间步骤的正文被收进「过程折叠」后就不再是「结果」，
+ * 导航清单里不该留一个点不到（元素已移除）的条目。
+ * @param el - 已登记或未登记的元素。
+ */
+function dropAnchor(el) {
+  if (el === null || el === undefined) return
+  const i = state.anchors.findIndex(a => a.el === el)
+  if (i < 0) return
+  state.anchors.splice(i, 1)
   if (state.navOpen) scheduleNavRebuild()
 }
 
@@ -2033,8 +2026,151 @@ function removePendingUserMsgs() {
   document.querySelectorAll('#messages .msg.user[data-pending]').forEach(el => el.remove())
 }
 
+/* ---------- 回合过程折叠 ----------
+   一个回合里只有「最后一步的正文」是结果，其余（思考原文、工具调用、中间步骤正文）
+   都是过程：全部收进 #messages 里的 .turn-process 块，运行中展开、回合结束自动收起。
+   于是聊天流 = 你的消息 + 每个回合一行过程摘要 + 结果气泡。 */
+
+/** 清空回合过程的记账（DOM 引用一起丢，下一次过程项出现时重建）。 */
+function resetTurnProcess() {
+  state.turn = {
+    group: null, body: null, summary: null, caret: null,
+    pending: null, rows: 0, tools: 0, textRows: 0, reasonChars: 0, startedAt: 0,
+  }
+}
+
+/** 本回合的过程折叠块（懒创建，插在结果气泡之前——过程总是先出现）。 */
+function turnProcess() {
+  const t = state.turn
+  if (t.group) return t
+  if (t.startedAt === 0) t.startedAt = Date.now()
+  const group = document.createElement('div')
+  group.className = 'turn-process'
+  const head = document.createElement('button')
+  head.type = 'button'
+  head.className = 'tp-head'
+  const caret = document.createElement('span')
+  caret.className = 'tp-caret'
+  caret.textContent = '▼'
+  const summary = document.createElement('span')
+  summary.className = 'tp-summary'
+  summary.textContent = '过程'
+  head.appendChild(caret); head.appendChild(summary)
+  head.addEventListener('click', () => {
+    group.classList.toggle('collapsed')
+    caret.textContent = group.classList.contains('collapsed') ? '▶' : '▼'
+  })
+  const body = document.createElement('div')
+  body.className = 'tp-body'
+  group.appendChild(head); group.appendChild(body)
+  $('#messages').appendChild(group)
+  t.group = group; t.body = body; t.summary = summary; t.caret = caret
+  renderTurnSummary()
+  return t
+}
+
+/** 过程摘要一行字：已思考多少字 / 几次工具 / 几段中间说明 / 用了多久。 */
+function renderTurnSummary() {
+  const t = state.turn
+  if (!t.summary) return
+  const bits = []
+  if (t.reasonChars > 0) bits.push('已思考 ' + fmtTokens(t.reasonChars) + ' 字')
+  if (t.tools > 0) bits.push(t.tools + ' 次工具')
+  if (t.textRows > 0) bits.push(t.textRows + ' 段中间说明')
+  const seconds = t.startedAt > 0 ? Math.round((Date.now() - t.startedAt) / 1000) : 0
+  if (seconds > 0) bits.push(seconds + 's')
+  t.summary.textContent = '过程' + (bits.length > 0 ? ' · ' + bits.join(' · ') : '')
+}
+
+/** 往过程块里加一行（text=正文 markdown / reason=思考原文）。 */
+function appendTurnRow(kind, text) {
+  const t = turnProcess()
+  const row = document.createElement('div')
+  row.className = 'tp-row ' + (kind === 'reason' ? 'tp-reason' : 'tp-text')
+  if (kind === 'reason') {
+    const tag = document.createElement('span')
+    tag.className = 'tp-tag'
+    tag.textContent = '已思考 · ' + text.length + ' 字'
+    row.appendChild(tag)
+    const body = document.createElement('span')
+    body.textContent = text
+    row.appendChild(body)
+    t.reasonChars += text.length
+  } else {
+    row.classList.add('md')
+    row.innerHTML = renderMarkdown(text)
+    t.textRows += 1
+  }
+  t.body.appendChild(row)
+  t.rows += 1
+  renderTurnSummary()
+  return row
+}
+
+/**
+ * 把「上一步的正文气泡」降级成过程里的一行。
+ *
+ * 模型分步时，先流出来的那几段正文（「Now the endpoint mapping:」这类过渡话）
+ * 都不是结果；下一步开始或出现工具调用时把它们收进过程块，并撤掉它们的锚点。
+ * @returns {boolean} 是否真的收走了一段有正文的气泡。
+ */
+function demotePending() {
+  const t = state.turn
+  const pending = t.pending
+  t.pending = null
+  if (!pending) return false
+  const text = String(pending.body.mdSource || '')
+  const had = text.trim() !== ''
+  if (had) appendTurnRow('text', text)
+  dropAnchor(pending.wrap)
+  pending.wrap.remove()
+  if (state.streamWrap === pending.wrap) {
+    state.streamEl = null
+    state.streamWrap = null
+    state.streamPaintTimer = null
+    state.streamPaintedAt = 0
+  }
+  return had
+}
+
+/**
+ * 回合收尾：把过程块收起来，并处理没有定稿的流式气泡。
+ *
+ * 结果气泡（本回合最后一步的正文）留在聊天流里不动；过程块默认收起——一个回合
+ * 无论跑了几十步，历史里只多一行。回合若没有任何结果正文，过程块同样收起
+ * （点开即可看它到底做了什么）。
+ */
+function finishTurnProcess() {
+  const t = state.turn
+  /* 半途的气泡（消息定稿事件没来）也算这一步的正文：有字就留作结果，空白就删掉 */
+  if (state.streamEl && state.streamWrap) {
+    const src = String(state.streamEl.mdSource || '')
+    if (src.trim() === '') {
+      const gone = state.streamWrap
+      gone.remove()
+      state.streamEl = null
+      state.streamWrap = null
+      state.streamPaintTimer = null
+      state.streamPaintedAt = 0
+      if (t.pending && t.pending.wrap === gone) t.pending = null
+    }
+  }
+  if (t.group) {
+    if (t.rows === 0) t.group.remove()
+    else {
+      t.group.classList.add('collapsed')
+      if (t.caret) t.caret.textContent = '▶'
+      renderTurnSummary()
+    }
+  }
+  resetTurnProcess()
+}
+
 function startAssistantStream() {
   if (state.streamEl) return state.streamEl
+  /* 上一步的气泡还没被收走就又开一段（缺 step/start 的窗口）：先收进过程块，
+     免得聊天流里并排挂着两个只有半句话的气泡 */
+  if (state.turn.pending) demotePending()
   hideThinking()
   const el = document.createElement('div')
   el.className = 'msg bot'
@@ -2051,6 +2187,8 @@ function startAssistantStream() {
   $('#messages').appendChild(el)
   state.streamWrap = el
   state.streamEl = body
+  /* 记下这一步的气泡：下一步开始或工具调用时它会被降级成过程里的一行 */
+  state.turn.pending = { wrap: el, body }
   scrollMsgs()
   return body
 }
@@ -2076,11 +2214,11 @@ function paintStream(body) {
   scrollMsgs()
 }
 /**
- * 一条助手消息定稿：写正文、补复制按钮、必要时加思考行。
+ * 一条助手消息定稿：写正文、补复制按钮。
  *
- * **没有正文也没有思考的「空步骤」不留气泡**：模型分步时中间那些只调了工具的步骤
- * 曾经会留一个只剩 token 统计的砖块，聊天流里全是它。用量照旧记进 HUD 的速率面板
- * （`rateStepDone`），只是不占聊天流。
+ * **只有正文是结果**：本回合最后一步的正文留在聊天流里（结果气泡）；思考原文一律
+ * 进「过程折叠」块（不再有「已思考 · N 字」气泡），没有正文的步骤（只思考或只调
+ * 工具）更不留气泡。用量照旧记进 HUD 的速率面板（`rateStepDone`）。
  * @param message - assistant/message 事件里的消息体。
  * @param usage - 该步骤的用量（可能缺失）。
  * @param replay - 历史回放（不计速率采样）。
@@ -2090,12 +2228,17 @@ function finalizeAssistant(message, usage, replay) {
   const reasoning = blocksReasoning(message.content)
   /* 用量先记（空步骤也要进 HUD 面板）：面板是本页唯一的 token 统计出口。 */
   if (!replay && usage && Number.isFinite(Number(usage.outputTokens))) rateStepDone(usage)
-  if (text.trim() === '' && reasoning.trim() === '') {
-    if (state.streamWrap) state.streamWrap.remove()
-    state.streamEl = null
-    state.streamWrap = null
-    state.streamPaintTimer = null
-    state.streamPaintedAt = 0
+  if (reasoning.trim() !== '') appendTurnRow('reason', reasoning)
+  if (text.trim() === '') {
+    /* 空步骤：把半途的流式气泡收掉（正文为空，连行都不留） */
+    demotePending()
+    if (state.streamEl && state.streamWrap) {
+      state.streamWrap.remove()
+      state.streamEl = null
+      state.streamWrap = null
+      state.streamPaintTimer = null
+      state.streamPaintedAt = 0
+    }
     if (state.navOpen) scheduleNavRebuild()
     return
   }
@@ -2106,7 +2249,6 @@ function finalizeAssistant(message, usage, replay) {
   const nameRow = body.parentNode ? body.parentNode.querySelector('.msg-name') : null
   if (nameRow && !nameRow.querySelector('.msg-copy')) nameRow.appendChild(msgCopyBtn(() => body.mdSource || body.textContent))
   syncBotAnchor(body.closest('.msg'), text)
-  if (reasoning) body.parentNode.insertBefore(buildReasonLine(reasoning), body)
   state.streamEl = null
   state.streamWrap = null
   state.streamPaintTimer = null
@@ -2116,10 +2258,14 @@ function finalizeAssistant(message, usage, replay) {
 }
 
 /**
- * 一条工具调用块。`collapsed` 为真时默认收起（历史回放用：一条会话动辄上百次调用，
- * 全展开既吵又慢）。
+ * 一条工具调用块，挂进本回合的「过程折叠」块（不再直接占聊天流）。
+ *
+ * `collapsed` 为真时工具块自身默认收起（历史回放用：一条会话动辄上百次调用）。
+ * 进过程块之前先把上一步的正文降级——工具调用说明那几段话不是结果。
  */
 function appendToolBlock(callId, name, args, collapsed) {
+  demotePending()
+  const t = turnProcess()
   const el = document.createElement('div')
   el.className = 'tool-block tool-running' + (collapsed ? ' collapsed' : '')
   const head = document.createElement('div')
@@ -2138,7 +2284,10 @@ function appendToolBlock(callId, name, args, collapsed) {
   body.textContent = '运行中…'
   head.addEventListener('click', () => el.classList.toggle('collapsed'))
   el.appendChild(head); el.appendChild(body)
-  $('#messages').appendChild(el)
+  t.body.appendChild(el)
+  t.tools += 1
+  t.rows += 1
+  renderTurnSummary()
   state.toolBlocks.set(callId, el)
   if (!state.suppressScroll) scrollMsgs()
   termLine('工具调用 ' + name + ' ' + (args || ''), 't-dim')
@@ -2259,12 +2408,16 @@ function handleSessionEvent(sid, event, replay) {
       break
     }
     case 'turn/start':
+      /* 上一回合若没走到 turn/end（窗口截断、失败），先把它收干净再开新的 */
+      finishTurnProcess()
       setRunning(true)
       if (!replay) rateTurnStart()
       showThinking()
       break
     case 'step/start':
       if (!replay) rateStepStart()
+      /* 新的一步开始了：上一步的正文不是结果，收进过程折叠 */
+      demotePending()
       break
     case 'turn/end': {
       setRunning(false)
@@ -2281,7 +2434,8 @@ function handleSessionEvent(sid, event, replay) {
       } else if (r.kind === 'max-tokens') {
         appendSysLine('达到单步输出上限')
       }
-      if (state.streamEl && (state.streamEl.mdSource || '') === '') { state.streamWrap.remove(); state.streamEl = null; state.streamWrap = null }
+      /* 过程折叠收起：本回合最后一步的正文留在聊天流里当结果 */
+      finishTurnProcess()
       break
     }
     case 'todo/write':
@@ -4668,6 +4822,7 @@ function enterMain() {
   state.toolBlocks.clear()
   state.streamEl = null
   state.streamWrap = null
+  resetTurnProcess()
   state.pendingUserText = null
   state.pendingAttachmentsOnly = false
   state.attachments = []
@@ -4734,6 +4889,8 @@ function renderHistoryRecords(sessionId) {
   state.anchorSeq = 0
   state.streamEl = null
   state.streamWrap = null
+  /* 过程折叠块的 DOM 跟着 box 一起没了，引用必须丢掉（否则会往已移除的节点里加行） */
+  resetTurnProcess()
   state.suppressScroll = true
   if (state.historyHasMore) {
     const more = document.createElement('button')
@@ -4752,6 +4909,8 @@ function renderHistoryRecords(sessionId) {
     if (ev.type === 'assistant/chunk') continue
     handleSessionEvent(sessionId, ev, true)
   }
+  /* 窗口多半从半截开始/结束：收尾一次，保证回放出来的过程块都是收起的 */
+  finishTurnProcess()
   state.suppressScroll = false
   if (lastTodos) renderTodos(lastTodos)
   if (state.historyHasMore || keepTop > 0) {
