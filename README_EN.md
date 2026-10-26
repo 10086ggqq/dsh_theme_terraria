@@ -108,6 +108,11 @@ dead). <kbd>Esc</kbd> closes a modal as well.
   when the Host starts, so reloading the window or reloading the plugin will not pick up new rows.
 - Way out: "切回官方界面" on the theme title screen, or <kbd>Alt</kbd>+<kbd>O</kbd>. On the Host side,
   `DSH_TERRARIA_STANDALONE=0` disables the takeover and `DSH_TERRARIA_SKIN=0` disables the fallback skin.
+- **The way out works both ways**: "切回官方界面" writes `localStorage['terraria.takeover'] = '0'` and stays
+  in effect across restarts, so once you are back on the official UI a "🌳 泰拉瑞亚主题" pixel button sits in
+  the bottom-right corner (or press <kbd>Alt</kbd>+<kbd>T</kbd>); it clears the flag and takes the window
+  back. Every decision is recorded in `localStorage['terraria.inject']` — check that first when the UI
+  looks wrong.
 
 ### Configure the API Key and Start Chatting
 
@@ -122,6 +127,7 @@ dead). <kbd>Esc</kbd> closes a modal as well.
 
 | Pitfall | Symptom | Fix |
 |---|---|---|
+| Desktop window shows a "warm parchment official UI" instead of Terraria | Pixel palette and pixel font are there, but the layout is the stock one (sidebar "插件 / 自动化任务", "探索未至之境" in the middle); restarting does not help | Rendering is fine — the **takeover is switched off**. `localStorage['terraria.takeover'] = '0'` (written by "切回官方界面" / `Alt+O`) persists forever. Click the "🌳 泰拉瑞亚主题" button in the bottom-right corner, or press `Alt+T`; or run `localStorage.removeItem('terraria.takeover'); location.reload()` in DevTools. When it still refuses, read `localStorage['terraria.inject']` — it records which step bailed out |
 | Desktop app window does not show the theme | Plugin says "running" but the window stays official | The Desktop window never requests the Host dist; since 0.2.0 the injection layer takes the window over to the theme page. Injection rows are a **one-shot snapshot at Host start**, so quit the app completely and relaunch (reloading the window or the plugin is not enough). If the takeover is unavailable, it falls back to "official UI + pixel skin" |
 | Theme page loads but never connects | Status keeps reconnecting | Use "切回官方界面" on the theme title screen, or <kbd>Alt</kbd>+<kbd>O</kbd>, to get a working UI back, then send the console error |
 | Browser caches old UI | Page still shows the old version after a plugin update | Hard refresh with `Ctrl+F5`, or append `?v=2` to the URL |
@@ -201,9 +207,10 @@ The top bar's "插件管理" (also on the title screen) opens the plugin dialog,
 - **Local / Git source install** (for everything search cannot find): a spec input with "选择文件夹…" (the desktop shell's native picker returns the host's absolute path), "选择 .tgz…" (`__DSH_HOST_PATHS__.pathFor`), and drag-and-drop of a folder onto the row. Every host spec form is accepted — an absolute path (`D:\code\my-plugin`, must contain package.json), a `*.tgz` (local or URL), a git repo (`github:you/repo`, `https://github.com/you/repo`, `git+https://…`, `git@host:path`) and a registry name (optionally with `@version`). **Local paths must be absolute**: `file:///D:/…` and relative paths are refused by the host (measured: `not-a-package: the path does not exist` / `invalid-spec: a local path must be absolute`);
 - **Inspect**: `pluginManager/inspect` resolves a spec (package name, npm alias, git URL, local path, tarball) and reports whether it is a bundle, plus version and description; refusals show the `problem` and the raw reason (e.g. `not-found` + registry text, or `already-installed`);
 - **Install**: `pluginManager/installBundle` (with a client-minted `requestId` and `enabled: true`); the outcome is reported by `application` (`applied / restart-required / failed`) with error code, diagnostic and the tail of the pnpm output. The log area also collects the host's `plugin-manager/install-log` events;
-- **Installed**: `pluginManager/listBundles` lists every bundle (name @ version · title · description) with **enable / disable** (`setBundleEnabled`) and, when removable, **remove** (`removeBundle`); built-in bundles are marked "内置（不可卸载）" with the toggle disabled, and multi-plugin bundles list their plugins;
+- **Installed**: `pluginManager/listBundles` lists every bundle grouped by origin, and **both groups fold** — **Personal** (declared in the current profile's dependencies, installed by you, disable / remove) is expanded by default, **Official** (shipped with the dsh installation, disable-only) is collapsed by default and opens automatically when the Personal group is empty. Each row can be **enabled / disabled** (`setBundleEnabled`) and, when removable, **removed** (`removeBundle`); **double-click any row to open the plugin detail page**;
+- **Plugin detail page**: name @ version, title, origin (Personal / Official), state, removability (built-in, or protected by `management-required`), optional-bundle flag, error code and description; below that, "Contains N plugins" (each module name, its Chinese note, whether it is running) and "Raw info" (the bundle JSON) — both **collapsed by default** and opened on click. Enable / disable / remove also work from the detail page and refresh in place; removing the plugin drops you back to the list;
 - **Registry**: shows what `pluginManager/registries` resolved (here `registry.npmjs.org` with `registry.npmmirror.com` as fallback);
-- **Current preset inventory**: the old settings-page cordis.yml inventory moved here, with the raw preset file available for comparison.
+- **Current preset inventory**: the old settings-page cordis.yml inventory moved here, tucked into a **collapsed-by-default** section (with a count in its title); expanding it still offers the raw preset file for comparison.
 
 #### Why plugins that live on GitHub do not show up in the search
 
@@ -218,7 +225,9 @@ Installing is unaffected: paste the repository into "本地 / Git 来源安装"
 (`https://github.com/you/repo`, `github:you/repo` — `inspect` reports `{status:"accepted",kind:"git",host:"github.com"}`),
 use an absolute path for a local checkout, or point at a `*.tgz`; pnpm clones, unpacks and installs the dependencies itself.
 
-![Plugin Manager](screenshots/plugin-manager.png)
+![Plugin Manager: personal / official groups, double-click for details](screenshots/plugin-manager.png)
+
+![Plugin detail page: origin / state / removal, with two collapsed sections below](screenshots/plugin-detail.png)
 
 ### Continue-Session Modal: Workspaces as Parents, Sessions as Children
 
@@ -342,12 +351,14 @@ git/                      <- this repository = a standard dsh plugin package (Gi
 │   ├── dog_pet.html          Devourer of Gods desk pet (iframe page with postMessage protocol)
 │   ├── cryogen_pet.html      Cryogen desk pet (iframe page with postMessage protocol)
 │   └── manifest.webmanifest  PWA manifest
-├── screenshots/          <- live screenshots (7)
+├── screenshots/          <- live screenshots
 │   ├── title-screen.png      title screen
 │   ├── chat-main.png         main chat interface
 │   ├── mode-select.png       mode select modal (character creation)
 │   ├── settings.png          settings modal (key/wallpaper/plugins)
-│   ├── plugin-manager.png    plugin manager
+│   ├── plugin-manager.png    plugin manager (personal / official groups)
+│   ├── plugin-detail.png     plugin detail page (collapsed)
+│   ├── plugin-detail-open.png plugin detail page ("contains" expanded)
 │   ├── workspace.png         workspace modal
 │   └── desk-pet.png          desk pet modal
 ├── README.md             <- Chinese documentation

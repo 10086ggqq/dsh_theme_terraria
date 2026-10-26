@@ -550,6 +550,32 @@ html[data-terraria-desktop][data-terraria-modal] #screen-title { -webkit-app-reg
 .list-row.ws-folder .r-name { color: var(--gold); }
 .f-caret { flex: none; width: 14px; color: var(--torch); font-size: 12px; }
 .list-row.r-arch { opacity: 0.72; }
+/* ---------- 模型选择：思考强度的折叠面板 + 横向胶囊 ---------- */
+.list-row .r-effort { flex: none; font-size: 11px; color: var(--gold); opacity: 0.9; }
+.list-row .r-caret { flex: none; font-size: 10px; padding: 2px 7px; }
+.list-row:hover .r-caret { color: var(--gold); }
+.effort-panel {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px 10px;
+  margin: -2px 0 2px 14px;
+  border-left: 3px solid var(--torch);
+  background: rgba(0, 0, 0, 0.22);
+}
+.effort-panel[hidden] { display: none; }
+.effort-pill {
+  font-family: inherit; font-size: 12px; line-height: 1;
+  padding: 5px 15px; border-radius: 999px;
+  border: 2px solid var(--black);
+  background: var(--slate-mid); color: var(--parchment);
+  box-shadow: inset 1px 1px var(--slate-hi);
+  text-shadow: 1px 1px 0 var(--black);
+  cursor: pointer;
+}
+.effort-pill:hover { filter: brightness(1.2); color: #fff; }
+.effort-pill.on {
+  background: var(--gold); color: var(--slate-dark);
+  border-color: #7a6000; text-shadow: none;
+}
 /* ---------- 消息区：锚点导航 ---------- */
 .msg-area { position: relative; flex: 1; min-height: 0; display: flex; }
 .msg-area .messages { flex: 1; }
@@ -776,7 +802,9 @@ html[data-terraria-desktop][data-terraria-modal] #screen-title { -webkit-app-reg
   position: fixed; inset: 0; width: 100%; height: 100%;
   object-fit: cover; z-index: -1; display: none;
 }
-.plugin-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+.plugin-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+/* 行不许被压缩：插件多时列表滚动，而不是把每一行挤成一条细线。 */
+.plugin-list > * { flex: none; }
 .plugin-row {
   display: flex; align-items: center; gap: 8px; padding: 5px 8px;
   background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
@@ -789,6 +817,32 @@ html[data-terraria-desktop][data-terraria-modal] #screen-title { -webkit-app-reg
   word-break: break-word; max-height: 260px; overflow-y: auto;
   background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 8px; border-radius: 3px;
 }
+/* 已安装列表：双击进详情的行尾提示 */
+.list-row .r-hint { flex: none; font-size: 11px; color: var(--stone); opacity: 0.8; }
+.list-row:hover .r-hint { color: var(--gold); opacity: 1; }
+/* 插件详情页：标题、键值区、折叠区块 */
+.pd-title { font-size: 16px; color: #fff; text-shadow: 1px 1px 0 var(--black); word-break: break-all; }
+.pd-sub { font-size: 12px; color: var(--stone); word-break: break-all; margin-top: 2px; }
+.pd-desc { font-size: 13px; color: var(--parchment); line-height: 1.6; }
+.fold-sec {
+  border: 2px solid var(--black);
+  background: rgba(0,0,0,0.25);
+  border-radius: 3px;
+}
+.fold-sec > summary {
+  cursor: pointer; list-style: none; padding: 6px 10px;
+  font-size: 12px; color: var(--torch); letter-spacing: 1px;
+  text-shadow: 1px 1px 0 var(--black);
+}
+.fold-sec > summary::-webkit-details-marker { display: none; }
+.fold-sec > summary::before { content: '▶ '; font-size: 10px; color: var(--stone); }
+.fold-sec[open] > summary::before { content: '▼ '; color: var(--gold); }
+.fold-sec > summary:hover { filter: brightness(1.2); }
+.fold-body { padding: 2px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+.pd-mod { display: flex; gap: 8px; align-items: baseline; font-size: 12px; line-height: 1.5; }
+.pd-mod .m-name { color: var(--gold); word-break: break-all; }
+.pd-mod .m-tag { flex: none; font-size: 11px; color: var(--stone); }
+.pd-mod .m-live { flex: none; font-size: 10px; color: var(--emerald); }
 
 #toast-root {
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
@@ -3332,7 +3386,7 @@ async function openPluginHub() {
   const body = document.createElement('div')
   const tip = document.createElement('div')
   tip.className = 'tree-tip'
-  tip.textContent = '插件就是 npm 包（形如 dsh-plugin-xxx / @scope/dsh-xxx），安装后会写进当前 profile 的 bundles；改动通常需要重启应用才完全生效。'
+  tip.textContent = '插件即 npm 包，装完写进当前 profile，重启应用才完全生效。'
   body.appendChild(tip)
 
   const installedBox = document.createElement('div')
@@ -3367,7 +3421,7 @@ async function openPluginHub() {
 
   const hint = document.createElement('div')
   hint.className = 'tree-tip'
-  hint.textContent = '「检查」只解析 spec（不安装）；「搜索」问公开 npm registry。搜不到不等于装不了 —— 没发布到 npm 的插件用下面的「本地 / Git 来源」按路径或仓库地址装。'
+  hint.textContent = '「搜索」问 npm registry；「检查」只解析不安装。'
   body.appendChild(hint)
 
   /* ---- 本地 / Git 来源安装 ---- */
@@ -3401,7 +3455,7 @@ async function openPluginHub() {
 
   const localHint = document.createElement('div')
   localHint.className = 'tree-tip'
-  localHint.textContent = '宿主要求本地路径是绝对路径（写 D:\\code\\my-plugin，别写 file:///… 或相对路径），目录里要有 package.json。桌面应用里「选择文件夹…」直接给出宿主绝对路径，也可以把文件夹拖到这一行；浏览器拿不到真实路径，请手动补全。'
+  localHint.textContent = '必须是绝对路径，目录里要有 package.json；也能直接拖进来。'
   body.appendChild(localHint)
 
   /* 拖入文件夹/压缩包直接取宿主绝对路径（桌面壳的 preload 提供 pathFor）。 */
@@ -3487,14 +3541,271 @@ async function openPluginHub() {
   }
   state.pluginLog = appendLog
 
-  /* ---- 已安装 bundle ---- */
+  /* ---- 已安装 bundle（官方 / 个人分组，双击进详情） ---- */
   let bundleNames = new Set()
+  let bundleMap = new Map()
+  /* restoreList 非 null 表示当前停在详情页：里面存着「回到已安装列表」的复原动作。 */
+  let restoreList = null
+  let savedScroll = 0
+  const detailHost = document.createElement('div')
+  detailHost.style.cssText = 'display:flex;flex-direction:column;gap:10px'
+
+  const modalBoxEl = () => document.querySelector('#modal-root .modal-box')
+  const setModalTitle = (text) => {
+    const head = document.querySelector('#modal-root .modal-title')
+    if (head !== null) head.textContent = text
+  }
+
+  /** 详情页的一行「键 — 值」。 */
+  const kvRow = (key, value) => {
+    const row = document.createElement('div')
+    row.className = 'kv-row'
+    const k = document.createElement('span')
+    k.className = 'k k-title'
+    k.textContent = key
+    const v = document.createElement('span')
+    v.className = 'v'
+    v.textContent = value
+    row.appendChild(k); row.appendChild(v)
+    return row
+  }
+
+  /**
+   * 折叠区块（详情页默认收起）。
+   * @param {string} summaryText - 收起时的标题行。
+   * @param {(box: HTMLElement) => void} build - 展开后的内容构造。
+   * @returns {HTMLDetailsElement} 未展开的 <details>。
+   */
+  const foldSection = (summaryText, build) => {
+    const det = document.createElement('details')
+    det.className = 'fold-sec'
+    const sum = document.createElement('summary')
+    sum.textContent = summaryText
+    const box = document.createElement('div')
+    box.className = 'fold-body'
+    build(box)
+    det.appendChild(sum); det.appendChild(box)
+    return det
+  }
+
+  /** 列表行与详情页共用的启停 / 卸载按钮（点按钮不冒泡成「双击进详情」）。 */
+  const bundleButtons = (b) => {
+    const frag = document.createDocumentFragment()
+    const toggle = document.createElement('button')
+    toggle.className = 'pixel-btn btn-sm r-act'
+    toggle.textContent = b.enabled ? '停用' : '启用'
+    toggle.disabled = Boolean(b.readOnlyReason)
+    if (b.readOnlyReason) toggle.title = '受保护：' + b.readOnlyReason
+    toggle.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      toggle.disabled = true
+      mutate(b.name, () => rpc('pluginManager.setBundleEnabled', { name: b.name, enabled: !b.enabled }),
+        (b.enabled ? '已停用 ' : '已启用 ') + b.name)
+        .catch(e => { toggle.disabled = false; toast('操作失败: ' + errText(e), 'err') })
+    })
+    frag.appendChild(toggle)
+    if (b.removable) {
+      const del = document.createElement('button')
+      del.className = 'pixel-btn btn-sm btn-danger r-act'
+      del.textContent = '卸载'
+      del.addEventListener('click', (ev) => {
+        ev.stopPropagation()
+        del.disabled = true
+        mutate(b.name, () => rpc('pluginManager.removeBundle', { name: b.name }), '已卸载 ' + b.name)
+          .catch(e => { del.disabled = false; toast('卸载失败: ' + errText(e), 'err') })
+      })
+      frag.appendChild(del)
+    }
+    return frag
+  }
+
+  /** 改完启停 / 卸载后刷新列表；若正停在详情页，就地重绘（插件被卸载则退回列表）。 */
+  const mutate = (name, run, okLabel) => {
+    appendLog('▶ ' + okLabel + ' …')
+    return run()
+      .then((r) => { afterChange(r, okLabel); return refresh() })
+      .then(() => {
+        if (restoreList === null) return
+        const fresh = bundleMap.get(name)
+        if (fresh === undefined) leaveDetail()
+        else renderDetail(fresh)
+      })
+  }
+
+  /** 详情面板：名称、来源 / 状态 / 卸载、描述、包含的插件（折叠）、原始信息（折叠）。 */
+  const buildDetailPanel = (b) => {
+    const panel = document.createElement('div')
+    panel.style.cssText = 'display:flex;flex-direction:column;gap:10px'
+    const title = typeof b.meta?.title === 'string' ? b.meta.title : (typeof b.meta?.title?.en === 'string' ? b.meta.title.en : '')
+    const rows = Array.isArray(b.rows) ? b.rows : []
+    const overrides = Array.isArray(b.overrides) ? b.overrides : []
+
+    const head = document.createElement('div')
+    const nm = document.createElement('div')
+    nm.className = 'pd-title'
+    nm.textContent = b.name + (b.version ? ' @' + b.version : '')
+    head.appendChild(nm)
+    const subBits = [title, overrides.length > 0 ? overrides.length + ' 项覆盖' : ''].filter(Boolean)
+    if (subBits.length > 0) {
+      const sub = document.createElement('div')
+      sub.className = 'pd-sub'
+      sub.textContent = subBits.join(' · ')
+      head.appendChild(sub)
+    }
+    panel.appendChild(head)
+
+    panel.appendChild(kvRow('来源', b.installed === true ? '个人 · 当前 profile 依赖' : '官方 · 随 dsh 安装'))
+    panel.appendChild(kvRow('状态', b.enabled ? '已启用' : '已停用'))
+    panel.appendChild(kvRow('卸载', b.removable
+      ? '可以卸载'
+      : (b.readOnlyReason === undefined ? '不可卸载 · 内置' : '受保护 · ' + b.readOnlyReason)))
+    if (b.optional === true) panel.appendChild(kvRow('可选插件', '是（dsh 可选 bundle）'))
+    if (b.error?.code) panel.appendChild(kvRow('错误', b.error.code))
+
+    const desc = b.description || b.meta?.description || ''
+    if (desc !== '') {
+      const p = document.createElement('div')
+      p.className = 'pd-desc'
+      p.textContent = desc
+      panel.appendChild(p)
+    }
+
+    const acts = document.createElement('div')
+    acts.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap'
+    acts.appendChild(bundleButtons(b))
+    panel.appendChild(acts)
+
+    panel.appendChild(foldSection('包含 ' + rows.length + ' 个插件', (box) => {
+      if (rows.length === 0) {
+        const none = document.createElement('div')
+        none.className = 'tree-tip'
+        none.textContent = '（这个 bundle 没有声明可展开的插件行）'
+        box.appendChild(none)
+        return
+      }
+      for (const r of rows) {
+        const short = shortModule(r.moduleName)
+        const line = document.createElement('div')
+        line.className = 'pd-mod'
+        const n = document.createElement('span')
+        n.className = 'm-name'
+        n.textContent = short
+        line.appendChild(n)
+        const note = PLUGIN_DESC[short]
+        if (typeof note === 'string') {
+          const tag = document.createElement('span')
+          tag.className = 'm-tag'
+          tag.textContent = note
+          line.appendChild(tag)
+        }
+        if (typeof r.entryId === 'string') {
+          const live = document.createElement('span')
+          live.className = 'm-live'
+          live.textContent = '运行中'
+          line.appendChild(live)
+        }
+        box.appendChild(line)
+      }
+    }))
+
+    if (overrides.length > 0) {
+      panel.appendChild(foldSection('覆盖 ' + overrides.length + ' 项预设行', (box) => {
+        for (const id of overrides) {
+          const line = document.createElement('div')
+          line.className = 'pd-mod'
+          const n = document.createElement('span')
+          n.className = 'm-name'
+          n.textContent = id
+          line.appendChild(n)
+          box.appendChild(line)
+        }
+      }))
+    }
+
+    panel.appendChild(foldSection('原始信息', (box) => {
+      const pre = document.createElement('div')
+      pre.className = 'plugin-raw'
+      pre.textContent = JSON.stringify(b, null, 2)
+      box.appendChild(pre)
+    }))
+    return panel
+  }
+
+  const renderDetail = (b) => {
+    detailHost.textContent = ''
+    detailHost.appendChild(buildDetailPanel(b))
+  }
+
+  const backRow = document.createElement('div')
+  backRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+  const backBtn = document.createElement('button')
+  backBtn.className = 'pixel-btn btn-sm'
+  backBtn.textContent = '‹ 返回已安装列表'
+  backBtn.addEventListener('click', () => leaveDetail())
+  backRow.appendChild(backBtn)
+
+  /** 进详情页：把列表整块从弹窗里摘下来存住，返回时原位放回（滚动位置一起还原）。 */
+  const showDetail = (b) => {
+    if (restoreList === null) {
+      const box = modalBoxEl()
+      savedScroll = box === null ? 0 : box.scrollTop
+      const kept = Array.from(body.childNodes)
+      restoreList = () => {
+        body.textContent = ''
+        for (const node of kept) body.appendChild(node)
+        restoreList = null
+        setModalTitle('插件管理')
+        const again = modalBoxEl()
+        if (again !== null) again.scrollTop = savedScroll
+      }
+    }
+    setModalTitle('插件详情')
+    body.textContent = ''
+    body.appendChild(backRow)
+    body.appendChild(detailHost)
+    renderDetail(b)
+  }
+
+  const leaveDetail = () => {
+    if (restoreList !== null) restoreList()
+  }
+
+  /** 一条已安装 bundle 的行；双击（按钮与操作区以外）进详情。 */
+  const makeBundleRow = (b) => {
+    const row = document.createElement('div')
+    row.className = 'list-row' + (b.enabled ? '' : ' r-arch')
+    row.title = '双击查看详情'
+    const main = document.createElement('div')
+    main.className = 'r-main'
+    const nm = document.createElement('div')
+    nm.className = 'r-name'
+    const title = typeof b.meta?.title === 'string' ? b.meta.title : (typeof b.meta?.title?.en === 'string' ? b.meta.title.en : '')
+    nm.textContent = b.name + (b.version ? ' @' + b.version : '') + (title ? ' · ' + title : '')
+    const mt = document.createElement('div')
+    mt.className = 'r-meta'
+    mt.textContent = [b.description || b.meta?.description || '', b.enabled ? '已启用' : '已停用',
+      b.error?.code ? '错误: ' + b.error.code : ''].filter(Boolean).join(' · ')
+    main.appendChild(nm); main.appendChild(mt)
+    row.appendChild(main)
+    const hint = document.createElement('span')
+    hint.className = 'r-hint'
+    hint.textContent = '›'
+    row.appendChild(hint)
+    row.appendChild(bundleButtons(b))
+    row.addEventListener('dblclick', (ev) => {
+      if (ev.target instanceof Element && ev.target.closest('button') !== null) return
+      showDetail(b)
+    })
+    return row
+  }
+
   const renderBundles = (bundles) => {
     installedBox.innerHTML = ''
     bundleNames = new Set(bundles.map(b => b.name))
+    bundleMap = new Map(bundles.map(b => [b.name, b]))
     const label = document.createElement('div')
     label.className = 'group-label'
-    label.textContent = '已安装（' + bundles.length + '）'
+    label.textContent = '已安装（' + bundles.length + '）· 双击看详情'
     installedBox.appendChild(label)
     if (bundles.length === 0) {
       const empty = document.createElement('div')
@@ -3503,54 +3814,38 @@ async function openPluginHub() {
       installedBox.appendChild(empty)
       return
     }
-    for (const b of bundles) {
-      const row = document.createElement('div')
-      row.className = 'list-row' + (b.enabled ? '' : ' r-arch')
-      const main = document.createElement('div')
-      main.className = 'r-main'
-      const nm = document.createElement('div')
-      nm.className = 'r-name'
-      const title = typeof b.meta?.title === 'string' ? b.meta.title : (typeof b.meta?.title?.en === 'string' ? b.meta.title.en : '')
-      nm.textContent = b.name + (b.version ? ' @' + b.version : '') + (title ? ' · ' + title : '')
-      const mt = document.createElement('div')
-      mt.className = 'r-meta'
-      mt.textContent = [b.description || b.meta?.description || '', b.enabled ? '已启用' : '已停用',
-        b.removable ? '' : '内置（不可卸载）', b.error?.code ? '错误: ' + b.error.code : ''].filter(Boolean).join(' · ')
-      main.appendChild(nm); main.appendChild(mt)
-      row.appendChild(main)
-      const toggle = document.createElement('button')
-      toggle.className = 'pixel-btn btn-sm r-act'
-      toggle.textContent = b.enabled ? '停用' : '启用'
-      toggle.disabled = Boolean(b.readOnlyReason)
-      toggle.addEventListener('click', () => {
-        toggle.disabled = true
-        rpc('pluginManager.setBundleEnabled', { name: b.name, enabled: !b.enabled })
-          .then(r => { afterChange(r, (b.enabled ? '已停用 ' : '已启用 ') + b.name); return refresh() })
-          .catch(e => { toggle.disabled = false; toast('操作失败: ' + errText(e), 'err') })
-      })
-      row.appendChild(toggle)
-      if (b.removable) {
-        const del = document.createElement('button')
-        del.className = 'pixel-btn btn-sm btn-danger r-act'
-        del.textContent = '卸载'
-        del.addEventListener('click', () => {
-          del.disabled = true
-          rpc('pluginManager.removeBundle', { name: b.name })
-            .then(r => { afterChange(r, '已卸载 ' + b.name); return refresh() })
-            .catch(e => { del.disabled = false; toast('卸载失败: ' + errText(e), 'err') })
-        })
-        row.appendChild(del)
+    /* 官方 = 随 dsh 安装提供（installed 为 false，只能停用）；
+       个人 = 写进当前 profile 依赖的插件（installed 为 true，可停用 / 卸载）。
+       两组都收进折叠区：个人默认展开，官方默认收起（个人为空时官方自动展开）。 */
+    const personal = bundles.filter(b => b.installed === true)
+    const official = bundles.filter(b => b.installed !== true)
+
+    const personalFold = foldSection('个人（' + personal.length + '）· 自己装的', (box) => {
+      if (personal.length === 0) {
+        const none = document.createElement('div')
+        none.className = 'tree-tip'
+        none.textContent = '（还没有自己装的插件）'
+        box.appendChild(none)
+        return
       }
-      installedBox.appendChild(row)
-      const rows = Array.isArray(b.rows) ? b.rows : []
-      if (rows.length > 1) {
-        const sub = document.createElement('div')
-        sub.className = 'r-meta'
-        sub.style.cssText = 'font-size:11px;color:var(--stone);margin:-4px 0 4px 10px'
-        sub.textContent = '包含 ' + rows.length + ' 个插件：' + rows.map(r => shortModule(r.moduleName)).join('、')
-        installedBox.appendChild(sub)
+      for (const b of personal) box.appendChild(makeBundleRow(b))
+    })
+    personalFold.open = true
+    installedBox.appendChild(personalFold)
+
+    const officialFold = foldSection('官方（' + official.length + '）· 随 dsh 安装，只能停用', (box) => {
+      if (official.length === 0) {
+        const none = document.createElement('div')
+        none.className = 'tree-tip'
+        none.textContent = '（没有官方内置插件）'
+        box.appendChild(none)
+        return
       }
-    }
+      for (const b of official) box.appendChild(makeBundleRow(b))
+    })
+    /* 个人区空着的时候把官方展开，免得一进来只看到一句「还没有自己装的插件」。 */
+    officialFold.open = personal.length === 0
+    installedBox.appendChild(officialFold)
   }
 
   const refresh = async () => {
@@ -3600,7 +3895,7 @@ async function openPluginHub() {
     if (items.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'tree-tip'
-      empty.textContent = '（没有结果；可以直接在输入框里粘贴包名或仓库地址再点「检查」/「安装」）'
+      empty.textContent = '（没有结果，可直接粘贴包名或仓库地址）'
       results.appendChild(empty)
     }
   }
@@ -3671,21 +3966,34 @@ async function openPluginHub() {
 
   inspectBtn.addEventListener('click', () => inspectSpec(input.value.trim(), inspectBtn))
 
-  /* ---- 当前预设的插件清单（原来是设置里的「插件管理」，挪到这里） ---- */
+  /* ---- 当前模式的插件清单：默认收起，点标题才展开（原来是设置里的「插件管理」） ---- */
+  /* 这块内容是异步回来的：包一层容器，进详情页时它随容器一起被摘走，
+     晚到的 appendChild 不会掉进详情视图里。 */
+  const presetWrap = document.createElement('div')
+  presetWrap.style.cssText = 'display:flex;flex-direction:column;gap:8px'
+  body.appendChild(presetWrap)
   const presetBox = document.createElement('div')
   presetBox.className = 'plugin-list'
-  body.appendChild(presetBox)
   const presetRaw = document.createElement('div')
   presetRaw.className = 'plugin-raw'
   presetRaw.hidden = true
-  body.appendChild(presetRaw)
   const presetId = state.agentPreset || 'standard'
+  const presetFold = foldSection('当前模式（' + (PRESET_NAMES[presetId] || presetId) + '）的插件清单', (box) => {
+    box.appendChild(presetBox)
+    const rawBtn = document.createElement('button')
+    rawBtn.className = 'pixel-btn btn-sm'
+    rawBtn.style.alignSelf = 'flex-start'
+    rawBtn.textContent = '查看原始预设文件'
+    rawBtn.addEventListener('click', () => {
+      presetRaw.hidden = !presetRaw.hidden
+      rawBtn.textContent = presetRaw.hidden ? '查看原始预设文件' : '隐藏原始预设文件'
+    })
+    box.appendChild(rawBtn)
+    box.appendChild(presetRaw)
+  })
+  presetWrap.appendChild(presetFold)
   rpc('agentPreset.read', { agentPreset: presetId }).then(v => {
     const rows = parsePresetPlugins(v.content || '')
-    const gl = document.createElement('div')
-    gl.className = 'group-label'
-    gl.textContent = '当前模式（' + (PRESET_NAMES[presetId] || presetId) + '）的插件清单'
-    presetBox.appendChild(gl)
     for (const r of rows) {
       const short = shortModule(r.name)
       const row = document.createElement('div')
@@ -3700,14 +4008,7 @@ async function openPluginHub() {
       presetBox.appendChild(row)
     }
     presetRaw.textContent = v.content || ''
-    const rawBtn = document.createElement('button')
-    rawBtn.className = 'pixel-btn btn-sm'
-    rawBtn.textContent = '查看原始预设文件'
-    rawBtn.addEventListener('click', () => {
-      presetRaw.hidden = !presetRaw.hidden
-      rawBtn.textContent = presetRaw.hidden ? '查看原始预设文件' : '隐藏原始预设文件'
-    })
-    body.appendChild(rawBtn)
+    presetFold.querySelector('summary').textContent = '当前模式（' + (PRESET_NAMES[presetId] || presetId) + '）的插件清单（' + rows.length + '）'
   }).catch(() => { /* 预设读不到就只留安装区 */ })
 
   openModal('插件管理', body, [{ label: '关闭', onClick: () => { state.pluginLog = null } }], () => { state.pluginLog = null })
@@ -3966,14 +4267,38 @@ async function openModelPicker() {
       })
       .catch(e => toast('切换失败: ' + e.message, 'err'))
   }
+  /* 思考强度用手风琴：同一时间只展开一个模型的面板。 */
+  let openEffortPanel = null
+  const toggleEffortPanel = (key, panel, caret) => {
+    if (openEffortPanel !== null && openEffortPanel.key === key) {
+      panel.hidden = true
+      caret.textContent = '▾'
+      openEffortPanel = null
+      return
+    }
+    if (openEffortPanel !== null) {
+      openEffortPanel.panel.hidden = true
+      openEffortPanel.caret.textContent = '▾'
+    }
+    panel.hidden = false
+    caret.textContent = '▴'
+    openEffortPanel = { key, panel, caret }
+  }
+  /* 直接点模型行时用它：模型声明的默认强度，没有就取第一个。 */
+  const defaultEffortOf = (m) => (m.reasoning
+    ? (m.reasoning.defaultEffort || (m.reasoning.efforts && m.reasoning.efforts[0] && m.reasoning.efforts[0].id))
+    : undefined)
+
   for (const g of v.groups || []) {
     const gl = document.createElement('div')
     gl.className = 'group-label'
     gl.textContent = g.name
     body.appendChild(gl)
     for (const m of g.models || []) {
+      const isCurrent = Boolean(v.current && v.current.provider === g.id && v.current.model === m.id)
+      const efforts = m.reasoning && Array.isArray(m.reasoning.efforts) ? m.reasoning.efforts : []
       const row = document.createElement('div')
-      row.className = 'list-row' + (v.current && v.current.provider === g.id && v.current.model === m.id ? ' r-active' : '')
+      row.className = 'list-row' + (isCurrent ? ' r-active' : '')
       const main = document.createElement('div')
       main.className = 'r-main'
       const nm = document.createElement('div')
@@ -3984,22 +4309,54 @@ async function openModelPicker() {
       mt.textContent = m.id + (m.description ? ' · ' + m.description : '')
       main.appendChild(nm); main.appendChild(mt)
       row.appendChild(main)
-      row.addEventListener('click', () => pick(g.id, m.id, m.reasoning ? (m.reasoning.defaultEffort || (m.reasoning.efforts[0] && m.reasoning.efforts[0].id)) : undefined))
+      row.addEventListener('click', () => pick(g.id, m.id, defaultEffortOf(m)))
+
+      /* 只有一种强度（或没有）时不必展开：点行就是默认值。 */
+      if (efforts.length <= 1) {
+        body.appendChild(row)
+        continue
+      }
+
+      const currentEffort = isCurrent ? efforts.find(e => e.id === v.current.reasoningEffort) : undefined
+      if (currentEffort !== undefined) {
+        const tag = document.createElement('span')
+        tag.className = 'r-effort'
+        tag.textContent = '思考 ' + currentEffort.name
+        row.appendChild(tag)
+      }
+
+      const caret = document.createElement('button')
+      caret.className = 'pixel-btn btn-sm r-act r-caret'
+      caret.textContent = '▾'
+      caret.title = '选择思考强度'
+      const panel = document.createElement('div')
+      panel.className = 'effort-panel'
+      panel.hidden = true
+      caret.addEventListener('click', (ev) => {
+        ev.stopPropagation()
+        toggleEffortPanel(g.id + '/' + m.id, panel, caret)
+      })
+      row.appendChild(caret)
+
+      for (const ef of efforts) {
+        const pill = document.createElement('button')
+        pill.className = 'effort-pill' + (isCurrent && v.current.reasoningEffort === ef.id ? ' on' : '')
+        pill.textContent = ef.name || ef.id
+        pill.title = ef.description ? ef.description : ('思考强度 ' + (ef.name || ef.id))
+        pill.addEventListener('click', (ev) => {
+          ev.stopPropagation()
+          pick(g.id, m.id, ef.id)
+        })
+        panel.appendChild(pill)
+      }
+
       body.appendChild(row)
-      if (m.reasoning && m.reasoning.efforts && m.reasoning.efforts.length > 1) {
-        for (const ef of m.reasoning.efforts) {
-          const sub = document.createElement('div')
-          sub.className = 'list-row r-sub' + (v.current && v.current.provider === g.id && v.current.model === m.id && v.current.reasoningEffort === ef.id ? ' r-active' : '')
-          const sm = document.createElement('div')
-          sm.className = 'r-main'
-          const sn = document.createElement('div')
-          sn.className = 'r-name'
-          sn.textContent = '思考强度：' + ef.name
-          sm.appendChild(sn)
-          sub.appendChild(sm)
-          sub.addEventListener('click', (ev) => { ev.stopPropagation(); pick(g.id, m.id, ef.id) })
-          body.appendChild(sub)
-        }
+      body.appendChild(panel)
+      /* 当前模型的胶囊默认摊开：一眼看到现在选的是哪一档，也算给折叠箭头一个示范。 */
+      if (isCurrent) {
+        panel.hidden = false
+        caret.textContent = '▴'
+        openEffortPanel = { key: g.id + '/' + m.id, panel, caret }
       }
     }
   }

@@ -109,6 +109,9 @@ dsh plugin --profile web add /path/to/dsh_theme_terraria
 - **必须完整退出并重启应用**：注入行是宿主启动时的一次性快照，重载插件或刷新窗口都拿不到新行。
 - 退路：主题页标题屏「切回官方界面」或 <kbd>Alt</kbd>+<kbd>O</kbd>；
   宿主侧 `DSH_TERRARIA_STANDALONE=0` 关接管，`DSH_TERRARIA_SKIN=0` 连兜底皮肤也关。
+- **退路是双向的**：「切回官方界面」会写 `localStorage['terraria.takeover'] = '0'` 并一直生效，
+  所以回到官方界面后，右下角会挂一颗「🌳 泰拉瑞亚主题」像素按钮（也可以按 <kbd>Alt</kbd>+<kbd>T</kbd>），
+  点它清掉那个标记并重新接管。每次决策的结论都写在 `localStorage['terraria.inject']` 里，界面不对时先看它。
 
 ### 配置 API 密钥并开始对话
 
@@ -124,6 +127,7 @@ dsh plugin --profile web add /path/to/dsh_theme_terraria
 | 坑 | 现象 | 解法 |
 |---|---|---|
 | 桌面应用窗口里看不到主题 | 插件显示「运行中」，应用窗口仍是官方界面 | 桌面窗口不使用宿主服务的 dist，0.2.0 起改由注入层把窗口接管到主题页；注入行是**宿主启动时的一次性快照**，必须完整退出应用再重启（只刷新窗口或重载插件无效）。接管没生效时会退回「官方界面 + 像素皮肤」 |
+| 桌面窗口里是「黄黄的官方界面」而不是泰拉瑞亚界面 | 有像素配色/像素字体，但布局还是官方那套（侧栏「插件 / 自动化任务」、中间「探索未至之境」），重启也不变 | 不是渲染坏了：这是**接管被关掉**的状态。`localStorage['terraria.takeover'] = '0'`（主题页「切回官方界面」/ `Alt+O` 写入）会一直生效。点右下角「🌳 泰拉瑞亚主题」或按 `Alt+T` 即可回去；也可以 F12 执行 `localStorage.removeItem('terraria.takeover'); location.reload()`。死循环时看 `localStorage['terraria.inject']` 里记的那一步 |
 | 桌面窗口看不出主题、连接一直转圈 | 停在主题页但连不上宿主 | 主题页标题屏点「切回官方界面」或按 `Alt+O` 先回到可用界面，再把控制台报错发出来 |
 | 浏览器缓存旧 UI | 更新插件后页面还是旧样子 | 强制刷新 `Ctrl+F5`，或地址加 `?v=2` 绕过缓存 |
 | `dsh plugin add` 失败 | 报 `pnpm not found on PATH` 或 pnpm 错误 | `dsh plugin` 内部转发给 pnpm：安装 pnpm 并重开终端；git 方式安装的报错按提示在 profile 的 `pnpm-workspace.yaml` 补 `allowBuilds` 后重试 |
@@ -229,9 +233,10 @@ dsh plugin --profile web add /path/to/dsh_theme_terraria
 - **本地 / Git 来源安装**（搜不到就靠它）：一行输入框 + 「选择文件夹…」（桌面壳走原生目录选择器，直接给出宿主绝对路径）、「选择 .tgz…」（`__DSH_HOST_PATHS__.pathFor`）、也可以把文件夹**拖进这一行**；支持宿主的全部 spec 形态——绝对路径（`D:\code\my-plugin`，目录里要有 package.json）、`*.tgz`（本地或 URL）、git 仓库（`github:你/仓库`、`https://github.com/你/仓库`、`git+https://…`、`git@host:path`）、registry 包名（可带 `@版本`）。**本地路径必须是绝对路径**：`file:///D:/…` 与相对路径都会被宿主拒绝（实测 host 报 `not-a-package: the path does not exist` / `invalid-spec: a local path must be absolute`）；
 - **检查**：`pluginManager/inspect` 先解析 spec（包名 / npm 别名 / git 地址 / 本地路径 / tarball），显示它是不是 bundle、版本与描述；被拒绝时给出 `problem` 与原因（如 `not-found` + registry 报错原文、`already-installed`）；
 - **安装**：`pluginManager/installBundle`（带客户端生成的 `requestId`，`enabled: true`），结果按 `application` 区分 `applied / restart-required / failed`，失败时附错误码、诊断与 pnpm 输出尾部；安装日志区也会收集宿主推来的 `plugin-manager/install-log`；
-- **已安装**：`pluginManager/listBundles` 列出全部 bundle（名称 @ 版本 · 标题 · 描述），行尾可**启用 / 停用**（`setBundleEnabled`）、可卸载的还能**卸载**（`removeBundle`）；内置 bundle 标「内置（不可卸载）」并禁用开关；bundle 内含多个插件时列出插件名；
+- **已安装**：`pluginManager/listBundles` 列出全部 bundle，按来源分成两组，**两组都能折叠**——**个人**（写进当前 profile 依赖、自己装的，可停用 / 卸载）默认展开，**官方**（随 dsh 安装提供，只能停用）默认收起（个人为空时自动展开）；每行可**启用 / 停用**（`setBundleEnabled`），可卸载的还能**卸载**（`removeBundle`）；**双击任意一行进入插件详情页**；
+- **插件详情页**：包名 @ 版本、标题、来源（个人 / 官方）、状态、能否卸载（内置，或 `management-required` 受保护）、可选 bundle 标记、错误码与描述；下面是「包含 N 个插件」（逐条列模块名、中文说明、是否运行中）和「原始信息」（bundle 的 JSON）——两块都**默认折叠**，点标题才展开。详情页里也能直接启用 / 停用 / 卸载，改完就地刷新；插件被卸载则自动退回列表；
 - **安装源**：显示 `pluginManager/registries` 解析出来的源（本机是 `registry.npmjs.org` + 回退 `registry.npmmirror.com`）；
-- **当前模式的插件清单**：原来设置里的 cordis.yml 清单也挪到这里了，可展开原始预设文件对照。
+- **当前模式的插件清单**：原来设置里的 cordis.yml 清单也挪到这里了，收在一个**默认收起**的折叠块里（标题带数量），展开后还能看原始预设文件对照。
 
 #### 为什么 GitHub 上的插件在搜索里搜不到
 
@@ -246,7 +251,9 @@ dsh plugin --profile web add /path/to/dsh_theme_terraria
 实测 `inspect` 返回 `{status:"accepted",kind:"git",host:"github.com"}`）；本地检出目录填绝对路径，
 打包好的填 `*.tgz` 路径。pnpm 会自己 clone / 解包 / 装依赖。
 
-![插件管理器](screenshots/plugin-manager.png)
+![插件管理器：个人 / 官方分组，双击进详情](screenshots/plugin-manager.png)
+
+![插件详情页：来源 / 状态 / 卸载，下面两块默认折叠](screenshots/plugin-detail.png)
 
 ### 工作空间弹窗
 
@@ -366,12 +373,14 @@ dsh_theme_terraria/       <- 本仓库 = 一个标准 dsh 插件包（可直接�
 │   ├── dog_pet.html          神明吞噬者桌宠（iframe 内容页，含 postMessage 通信）
 │   ├── cryogen_pet.html      极地之灵桌宠（iframe 内容页，含 postMessage 通信）
 │   └── manifest.webmanifest  PWA 清单
-├── screenshots/          <- 实操截图（7 张）
+├── screenshots/          <- 实操截图
 │   ├── title-screen.png      标题屏
 │   ├── chat-main.png         主对话界面
 │   ├── mode-select.png       模式选择弹窗（人物创建）
 │   ├── settings.png          设置弹窗（密钥/壁纸/插件）
-│   ├── plugin-manager.png    插件管理器
+│   ├── plugin-manager.png    插件管理器（个人 / 官方分组）
+│   ├── plugin-detail.png     插件详情页（折叠状态）
+│   ├── plugin-detail-open.png 插件详情页（展开「包含的插件」）
 │   ├── workspace.png         工作空间弹窗
 │   └── desk-pet.png          人物桌宠弹窗
 ├── README.md             <- 中文文档（本文件）
